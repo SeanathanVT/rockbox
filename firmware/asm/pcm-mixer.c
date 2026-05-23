@@ -18,7 +18,7 @@
  *
  ****************************************************************************/
 
-#if defined(CPU_ARM)
+#if defined(CPU_ARM) && !(CONFIG_PLATFORM & PLATFORM_HOSTED)
   #include "arm/pcm-mixer.c"
 #elif defined(CPU_COLDFIRE)
   #include "m68k/pcm-mixer.c"

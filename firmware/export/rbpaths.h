@@ -40,7 +40,8 @@
 /* NOTE:  target-specific hosted HOME_DIR resides in filesystem-app.c */
 #if !defined(APPLICATION) || defined(SAMSUNG_YPR0) || defined(SAMSUNG_YPR1) || \
     defined(DX50) || defined(DX90) || defined(SONY_NWZ_LINUX) || \
-    defined(HIBY_LINUX) || defined(N3DS) || defined(SONY_PSP)
+    defined(HIBY_LINUX) || defined(N3DS) || defined(SONY_PSP) || \
+    defined(INNIOASIS_Y1)
 
 #define HOME_DIR "/"
 
