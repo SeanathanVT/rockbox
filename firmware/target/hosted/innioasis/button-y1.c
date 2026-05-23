@@ -1,18 +1,20 @@
 /*
  * Innioasis Y1 — button_map() for hosted/button-devinput.c
  *
- * event0 (mtk-kpd) capabilities (confirmed via `getevent -p`):
+ * event0 (mtk-kpd) capability list (getevent -p, 2026-05-23):
  *   102 HOME, 103 UP, 105 LEFT, 106 RIGHT, 107 END, 108 DOWN,
  *   114 VOLDN, 115 VOLUP, 116 POWER, 139 MENU, 158 BACK,
- *   211/212/231/232 — MTK-reserved (unused)
+ *   211 FOCUS, 212 CAMERA, 231 CALL, 232 REPLY
  *
- *   PLAY button assignment is unconfirmed: KEY_PLAYPAUSE (164) is NOT in
- *   event0's capability list, so the physical PLAY emits one of the codes
- *   above. Most likely KEY_MENU (139) or KEY_END (107). Needs per-press
- *   capture to pin down (see open-questions.md #5).
+ * Stock /system/usr/keylayout/mtk-kpd.kl translations:
+ *   102 HOME, 105/106 DPAD_LEFT/RIGHT, 116 POWER, 158 BACK,
+ *   232 DPAD_CENTER  <-- this is the Y1's center / OK / PLAY key
  *
  * event1 (ACCDET / headset): 163 NEXT, 164 PLAYPAUSE, 165 PREV, 166 STOP
  * event4 (AVRCP / Bluetooth): media keys
+ *
+ * Per-button getevent capture still pending to confirm KEY_REPLY emits on
+ * physical PLAY press (vs KEY_MENU as the fallback).
  */
 
 #include <linux/input.h>
@@ -29,7 +31,8 @@ int button_map(int keycode)
         case KEY_RIGHT:          return BUTTON_NEXT;
         case KEY_HOME:           return BUTTON_HOME;
         case KEY_BACK:           return BUTTON_BACK;
-        case KEY_MENU:           return BUTTON_PLAY;  /* PROVISIONAL: confirm via per-button getevent */
+        case KEY_REPLY:          return BUTTON_PLAY;  /* 232 -> DPAD_CENTER per mtk-kpd.kl */
+        case KEY_MENU:           return BUTTON_PLAY;  /* fallback if PLAY actually emits 139 */
         case KEY_POWER:          return BUTTON_POWER;
         /* Headset / AVRCP remote keys */
         case KEY_PLAYPAUSE:      return BUTTON_PLAY;
