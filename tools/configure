@@ -1760,8 +1760,8 @@ cat <<EOF
  ==Echo project==          ==Surfans==           301) R1
  270) Echo R1 (WIP)        280) F28 (WIP)
 
- ==Nintendo==
- 290) Nintendo 3DS (WIP)
+ ==Nintendo==             ==Innioasis==
+ 290) Nintendo 3DS (WIP)  305) Y1 (WIP)
 
 EOF
 
