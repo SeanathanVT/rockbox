@@ -1,21 +1,23 @@
 /*
  * Innioasis Y1 — button_map() for hosted/button-devinput.c
  *
- * Verified keycodes (from kernel dmesg `mtk-tpd: apt32 ctrl report Linux keycode`
- * + getevent on a live device):
- *   105 KEY_LEFT       — capacitive LEFT
- *   106 KEY_RIGHT      — capacitive RIGHT
- *   158 KEY_BACK       — capacitive BACK
+ * event0 (mtk-kpd) capabilities (confirmed via `getevent -p`):
+ *   102 HOME, 103 UP, 105 LEFT, 106 RIGHT, 107 END, 108 DOWN,
+ *   114 VOLDN, 115 VOLUP, 116 POWER, 139 MENU, 158 BACK,
+ *   211/212/231/232 — MTK-reserved (unused)
  *
- * Inferred from stock mtk-kpd.kl + AVRCP.kl (verify per-button on-device):
- *   102 KEY_HOME       — capacitive HOME (center)
- *   164 KEY_PLAYPAUSE  — capacitive PLAY (also headset + AVRCP via event4)
- *   116 KEY_POWER      — physical power button (/dev/input/event0)
- *   163 KEY_NEXTSONG   — headset / AVRCP only
- *   165 KEY_PREVIOUSSONG — headset / AVRCP only
+ *   PLAY button assignment is unconfirmed: KEY_PLAYPAUSE (164) is NOT in
+ *   event0's capability list, so the physical PLAY emits one of the codes
+ *   above. Most likely KEY_MENU (139) or KEY_END (107). Needs per-press
+ *   capture to pin down (see open-questions.md #5).
+ *
+ * event1 (ACCDET / headset): 163 NEXT, 164 PLAYPAUSE, 165 PREV, 166 STOP
+ * event4 (AVRCP / Bluetooth): media keys
  */
 
 #include <linux/input.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "button.h"
 #include "button-target.h"
 
@@ -27,9 +29,10 @@ int button_map(int keycode)
         case KEY_RIGHT:          return BUTTON_NEXT;
         case KEY_HOME:           return BUTTON_HOME;
         case KEY_BACK:           return BUTTON_BACK;
-        case KEY_PLAYPAUSE:      return BUTTON_PLAY;
+        case KEY_MENU:           return BUTTON_PLAY;  /* PROVISIONAL: confirm via per-button getevent */
         case KEY_POWER:          return BUTTON_POWER;
-        /* Headset / AVRCP remote keys — map to the same actions */
+        /* Headset / AVRCP remote keys */
+        case KEY_PLAYPAUSE:      return BUTTON_PLAY;
         case KEY_NEXTSONG:       return BUTTON_NEXT;
         case KEY_PREVIOUSSONG:   return BUTTON_PREV;
         default:                 return 0;
@@ -38,7 +41,12 @@ int button_map(int keycode)
 
 bool headphones_inserted(void)
 {
-    /* TODO: read /sys/class/switch/h2w/state once on-device path is confirmed.
-     * Stock /system/lib/libaudio.primary.default.so references this sysfs node. */
-    return true;
+    /* /sys/class/switch/h2w/state: "0" = unplugged, "1" = plugged.
+     * Confirmed present on stock Y1. */
+    int fd = open("/sys/class/switch/h2w/state", O_RDONLY);
+    if (fd < 0) return false;
+    char c = '0';
+    read(fd, &c, 1);
+    close(fd);
+    return c != '0';
 }
