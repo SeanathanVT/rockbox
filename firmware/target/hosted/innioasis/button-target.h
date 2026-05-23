@@ -1,13 +1,23 @@
 /*
  * Innioasis Y1 — button-target.h
  *
- * Physical layout (preliminary — verify each on-device with getevent):
- *   - 5 capacitive nav buttons across bottom bezel: LEFT, RIGHT, HOME, BACK, PLAY
- *   - 1 physical power button on side
+ * Physical layout (iPod-style click wheel):
+ *   - Top button    -- MENU / back
+ *   - Center button -- SELECT
+ *   - Bottom button -- PLAY / pause / stop
+ *   - Left button   -- previous track
+ *   - Right button  -- next track
+ *   - Capacitive ring around the cardinals -- scroll wheel
+ *     (list scroll; volume in WPS)
+ *   - No physical power button. KEY_POWER (116) is in the mtk-kpd capability
+ *     list and stock keylayout, but how/whether it emits on this unit is TBD.
  *   - Headphone-jack 3-button remote (PLAY_PAUSE, NEXT, PREV) via ACCDET
  *   - Bluetooth AVRCP keys via /dev/input/event4
  *
- * The touchscreen lives on /dev/input/event2 and is currently unused by the port.
+ * The bit definitions below still reflect the earlier (incorrect) 5-button
+ * bezel model; they get replaced in lockstep with button-y1.c +
+ * keymap-innioasisy1.c once the getevent capture from tools/capture-input.sh
+ * (in y1-platform) confirms which evdev codes the wheel and cardinals emit.
  */
 
 #ifndef _BUTTON_TARGET_H_
