@@ -161,6 +161,7 @@
 #define HIBY_R3PROII_PAD   79
 #define HIDIZS_AP80MAX_PAD 80
 #define PSP_PAD            81
+#define INNIOASIS_Y1_PAD   82
 
 /* CONFIG_REMOTE_KEYPAD */
 #define H100_REMOTE   1
