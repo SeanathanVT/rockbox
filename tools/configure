@@ -1795,6 +1795,9 @@ cat <<EOF
  ==Echo project==                                304) R1 baremetal (WIP)
  270) Echo R1 (WIP)       ==Nintendo==          ==Hidizs==
                           290) 3DS (WIP)        302) AP80 Pro Max (WIP)
+
+                                                ==Innioasis==
+                                                305) Y1 (WIP)
 EOF
 
   buildfor=`input`;
