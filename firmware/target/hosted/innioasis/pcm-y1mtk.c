@@ -1,32 +1,32 @@
 /*
  * Innioasis Y1 — PCM driver for MediaTek MT6572 /dev/eac.
  *
- * The kernel-side audio is the MTK "EAC" (Extended Audio Control) char device
- * — `misc 10:46`, magic 'C' ioctls. Music playback is plain blocking write(2);
- * the kernel driver DMAs to I2S internally. The path documented here was
- * verified by RE of `/system/lib/libaudio.primary.default.so` (2026-05-23 —
- * see `docs/audio-stack.md` for the full ioctl table and call-site trace).
+ * The kernel-side audio is the MTK "EAC" character device — `misc 10:46`,
+ * magic 'C' ioctls. Userspace flow (matches `AudDrv_ioctl.h` in the
+ * MT6572 BSP kernel, cross-referenced against /system/lib/libaudio.primary
+ * .default.so — see `docs/audio-stack.md`):
  *
- * Bringup sequence (replicates AudioMTKStreamOut::write prologue):
  *   open("/dev/eac", O_RDWR)
- *   ioctl(eac_fd, 0xc004431f, &dummy)      // HardwareInit handshake
- *   ioctl(eac_fd, 0xc0044320, &attr)       // configure mem-IF DL1 (sample rate, channels, bitwidth)
- *   ioctl(eac_fd, 0xc00443e1, &on=1)       // enable mem-IF block 0
- *   ioctl(eac_fd, 0xc00443e0, &on=1)       // start AFE downlink
+ *   ioctl(fd, ALLOCATE_MEMIF_DL1, buffer_size)   // alloc DRAM ring buffer
+ *   ioctl(fd, SET_HEADPHONE_ON,   1)             // route to headphone-out
+ *   ioctl(fd, START_MEMIF_TYPE,   MEM_DL1=0)     // arm the AFE chain
+ *   write(fd, pcm_buf, len)                      // blocking — copy_from_user
+ *                                                // into kernel ring; AFE DMA
+ *                                                // pulls from the same ring.
+ *   ...
+ *   ioctl(fd, STANDBY_MEMIF_TYPE, MEM_DL1=0)
+ *   ioctl(fd, SET_HEADPHONE_OFF, 0)
+ *   ioctl(fd, FREE_MEMIF_DL1)
+ *   close(fd)
  *
- * Hot loop:
- *   write(eac_fd, pcm_buf, len)            // blocking, returns bytes consumed
+ * The kernel's `AUDDRV_DL1_MAX_BUFFER_LENGTH` is 0x4000 (16 KB) — we ask for
+ * 8 KB which gives ~46 ms of 44.1k S16_LE stereo. The kernel will scale down
+ * silently if we ask for more.
  *
- * Teardown:
- *   ioctl(eac_fd, 0xc00443e1, &on=0)
- *   ioctl(eac_fd, 0xc00443e0, &on=0)
- *   close(eac_fd)
- *
- * Outstanding RE gap: the 22-byte attribute struct passed to ioctl 0x4320 is
- * only partially mapped. Known field offsets `{ u8 channels, u8 bitwidth,
- * u16 _pad, u32 samplerate, ... }`. The trailing 14 bytes are zeroed here
- * pending an on-device strace; if `ioctl(0x4320)` returns EINVAL on hardware,
- * dump mediaserver's invocation to recover the missing fields.
+ * Sample rate / channel / bitwidth: the kernel driver gets these from the
+ * AFE register writes done elsewhere (the HAL uses `AudioAnalogReg` for the
+ * codec setup). For a first cut we trust the stock register values left
+ * over from Android boot; codec re-init via `SET_ANAAFE_REG` is a follow-up.
  */
 
 #include "config.h"
@@ -49,85 +49,102 @@
 #include <errno.h>
 
 /* -------------------------------------------------------------------------- */
-/* MTK /dev/eac ioctl numbers (decoded from libaudio.primary.default.so).     */
+/* MTK AUD_DRV ioctl numbers (from mediatek/platform/mt6572/kernel/drivers/   */
+/* sound/AudDrv_ioctl.h — magic = 'C').                                       */
 
-#define EAC_HARDWARE_INIT       0xc004431f  /* _IOWR('C', 0x1f, int)         */
-#define EAC_SET_MEMIF_ATTR      0xc0044320  /* _IOWR('C', 0x20, void *attr)  */
-#define EAC_SET_AFE_ON          0xc00443e0  /* _IOWR('C', 0xe0, int on)      */
-#define EAC_SET_MEMIF_ENABLE    0xc00443e1  /* _IOWR('C', 0xe1, int on)      */
+#define AUD_DRV_IOC_MAGIC       'C'
+#define _AUD_IOWR(nr, sz)       (((3U)<<30) | ((sz)<<16) | (AUD_DRV_IOC_MAGIC<<8) | (nr))
+#define _AUD_IOW(nr, sz)        (((1U)<<30) | ((sz)<<16) | (AUD_DRV_IOC_MAGIC<<8) | (nr))
 
-/* 22-byte attribute struct (PARTIAL — see file header). */
-struct eac_memif_attr {
-    uint8_t  channels;       /* +0  */
-    uint8_t  bitwidth;       /* +1  — 16 or 32 */
-    uint16_t _pad2;          /* +2  */
-    uint32_t samplerate;     /* +4  */
-    uint8_t  unknown_8[4];   /* +8  — observed strb-initialised in HAL */
-    uint8_t  unknown_12;     /* +12 — strb */
-    uint8_t  _pad13[3];      /* +13 */
-    uint32_t unknown_16;     /* +16 — str-initialised */
-    uint8_t  unknown_20[3];  /* +20 — strb each */
-    uint8_t  _pad23;
-} __attribute__((packed));
+#define ALLOCATE_MEMIF_DL1      _AUD_IOWR(0x10, 4)  /* arg = buf size (bytes)  */
+#define FREE_MEMIF_DL1          _AUD_IOWR(0x11, 4)
+#define AUD_RESTART             _AUD_IOWR(0x1F, 4)
+#define START_MEMIF_TYPE        _AUD_IOWR(0x20, 4)  /* arg = MEMIF_BUFFER_TYPE */
+#define STANDBY_MEMIF_TYPE      _AUD_IOWR(0x21, 4)
+#define SET_HEADPHONE_ON        _AUD_IOW (0xa4, 4)
+#define SET_HEADPHONE_OFF       _AUD_IOW (0xa5, 4)
+
+/* MEMIF_BUFFER_TYPE (from AudDrv_Kernel.h) */
+#define MEM_DL1                 0
+
+/* Kernel ring buffer length we request. Kernel caps at 0x4000 (16 KB). */
+#define EAC_DL1_BUFFER_BYTES    0x2000  /* 8 KB == ~46 ms @ 44.1k S16 stereo */
 
 /* -------------------------------------------------------------------------- */
 
 static int eac_fd = -1;
-static bool eac_initialised = false;
+static bool dl1_allocated  = false;
+static bool route_active   = false;
+static bool stream_running = false;
 
-static pthread_t   worker_tid;
+static pthread_t       worker_tid;
 static pthread_mutex_t worker_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  worker_cv  = PTHREAD_COND_INITIALIZER;
 
 static const void *cur_addr = NULL;
 static size_t      cur_size = 0;
-static volatile bool worker_run     = false;
-static volatile bool worker_quit    = false;
-static volatile bool worker_paused  = false;
-static volatile bool stream_running = false;
-
-static unsigned int current_sample_rate = 44100;
+static volatile bool worker_run    = false;
+static volatile bool worker_quit   = false;
+static volatile bool worker_paused = false;
 
 /* -------------------------------------------------------------------------- */
+/* MEMIF lifecycle.                                                           */
 
-static void apply_memif_attr(unsigned int rate)
+static void eac_alloc_dl1(void)
 {
-    struct eac_memif_attr attr;
-    memset(&attr, 0, sizeof attr);
-    attr.channels   = 2;
-    attr.bitwidth   = 16;
-    attr.samplerate = rate;
-    if (ioctl(eac_fd, EAC_SET_MEMIF_ATTR, &attr) < 0)
-        logf("eac SET_MEMIF_ATTR: %s", strerror(errno));
+    if (dl1_allocated || eac_fd < 0)
+        return;
+    if (ioctl(eac_fd, ALLOCATE_MEMIF_DL1, EAC_DL1_BUFFER_BYTES) < 0)
+    {
+        logf("eac ALLOC_DL1 %d: %s", EAC_DL1_BUFFER_BYTES, strerror(errno));
+        return;
+    }
+    dl1_allocated = true;
+}
+
+static void eac_free_dl1(void)
+{
+    if (!dl1_allocated || eac_fd < 0)
+        return;
+    ioctl(eac_fd, FREE_MEMIF_DL1, 0);
+    dl1_allocated = false;
+}
+
+static void eac_route_headphone(bool on)
+{
+    if (eac_fd < 0)
+        return;
+    if (on == route_active)
+        return;
+    int v = on ? 1 : 0;
+    int cmd = on ? SET_HEADPHONE_ON : SET_HEADPHONE_OFF;
+    if (ioctl(eac_fd, cmd, v) < 0)
+        logf("eac route hp=%d: %s", on, strerror(errno));
+    route_active = on;
 }
 
 static void stream_start(void)
 {
-    if (stream_running)
+    if (stream_running || eac_fd < 0)
         return;
-    apply_memif_attr(current_sample_rate);
-
-    int on = 1;
-    if (ioctl(eac_fd, EAC_SET_MEMIF_ENABLE, &on) < 0)
-        logf("eac SET_MEMIF_ENABLE: %s", strerror(errno));
-    if (ioctl(eac_fd, EAC_SET_AFE_ON, &on) < 0)
-        logf("eac SET_AFE_ON: %s", strerror(errno));
-
+    eac_alloc_dl1();
+    eac_route_headphone(true);
+    if (ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1) < 0)
+        logf("eac START_MEMIF: %s", strerror(errno));
     stream_running = true;
 }
 
 static void stream_stop(void)
 {
-    if (!stream_running)
+    if (!stream_running || eac_fd < 0)
         return;
-    int off = 0;
-    ioctl(eac_fd, EAC_SET_MEMIF_ENABLE, &off);
-    ioctl(eac_fd, EAC_SET_AFE_ON, &off);
+    ioctl(eac_fd, STANDBY_MEMIF_TYPE, MEM_DL1);
     stream_running = false;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Worker thread: consumes buffers via blocking write(2) on /dev/eac.         */
+/* Worker thread: blocking write(2) loop pulling buffers via Rockbox's        */
+/* pcm_play_dma_complete_callback() get-more interface.                       */
 
 static void *worker_main(void *arg)
 {
@@ -172,8 +189,8 @@ static void *worker_main(void *arg)
         pthread_mutex_lock(&worker_mtx);
         if (more && next_addr && next_size)
         {
-            cur_addr = next_addr;
-            cur_size = next_size;
+            cur_addr   = next_addr;
+            cur_size   = next_size;
             worker_run = true;
         }
         else
@@ -191,7 +208,7 @@ static void *worker_main(void *arg)
 
 void audiohw_preinit(void)
 {
-    if (eac_initialised)
+    if (eac_fd >= 0)
         return;
 
     eac_fd = open("/dev/eac", O_RDWR);
@@ -201,11 +218,10 @@ void audiohw_preinit(void)
         return;
     }
 
-    int dummy = 0;
-    if (ioctl(eac_fd, EAC_HARDWARE_INIT, &dummy) < 0)
-        logf("eac HARDWARE_INIT: %s", strerror(errno));
-
-    eac_initialised = true;
+    /* `AUD_RESTART` (0x1F) is the HAL's hardware-init handshake; the kernel
+     * handler is a kitchen-sink clock+AFE reset. Best-effort — failure here
+     * isn't fatal because most state is also set by ALLOCATE_MEMIF_DL1. */
+    ioctl(eac_fd, AUD_RESTART, 0);
 }
 
 void audiohw_postinit(void)
@@ -221,37 +237,38 @@ void audiohw_close(void)
     pthread_mutex_unlock(&worker_mtx);
     pthread_join(worker_tid, NULL);
 
+    stream_stop();
+    eac_route_headphone(false);
+    eac_free_dl1();
     if (eac_fd >= 0)
     {
-        stream_stop();
         close(eac_fd);
         eac_fd = -1;
     }
-    eac_initialised = false;
 }
 
 void audiohw_set_frequency(int fsel)
 {
-    /* fsel is a Rockbox sample-rate index; resolve to Hz via pcm_sampr_type[]
-     * — but the HAL is locked to 44.1 kHz so we honour that until /dev/eac is
-     * verified to accept other rates. */
+    /* The HAL's primary output is locked to 44.1k S16_LE stereo (per
+     * audio_policy.conf). The kernel takes the rate from AFE registers
+     * configured during boot/codec init; sample-rate switching at runtime
+     * goes through SET_ANAAFE_REG (0x4302). Pinned to 44.1k for v1. */
     (void)fsel;
-    current_sample_rate = 44100;
 }
 
 void audiohw_set_volume(int vol_l, int vol_r)
 {
-    /* Software volume only for now; HW volume goes via AudioAnalogReg ioctls
-     * (0x4302/0x4303) which write to the MT6323 codec's volume registers. The
-     * exact codec register set is undocumented; deferred until a one-time
-     * register dump on device. */
+    /* HW volume = MT6323 codec register write via SET_ANAAFE_REG (0x4302).
+     * The exact register set is undocumented in the BSP source; need a
+     * one-time on-device dump of the codec gain registers before we can
+     * map a Rockbox dB value to register bits. Software volume only for
+     * now (HAVE_SW_VOLUME_CONTROL in innioasisy1.h). */
     (void)vol_l;
     (void)vol_r;
 }
 
 void audiohw_mute(int mute)
 {
-    /* No HW mute path RE'd. Software path mutes upstream. */
     (void)mute;
 }
 
@@ -277,9 +294,9 @@ void pcm_play_dma_start(const void *addr, size_t size)
     stream_start();
 
     pthread_mutex_lock(&worker_mtx);
-    cur_addr = addr;
-    cur_size = size;
-    worker_run = true;
+    cur_addr      = addr;
+    cur_size      = size;
+    worker_run    = true;
     worker_paused = false;
     pthread_cond_signal(&worker_cv);
     pthread_mutex_unlock(&worker_mtx);
@@ -289,8 +306,8 @@ void pcm_play_dma_stop(void)
 {
     pthread_mutex_lock(&worker_mtx);
     worker_run = false;
-    cur_addr = NULL;
-    cur_size = 0;
+    cur_addr   = NULL;
+    cur_size   = 0;
     pthread_mutex_unlock(&worker_mtx);
 
     stream_stop();
@@ -321,7 +338,6 @@ const void *pcm_play_dma_get_peak_buffer(int *count)
 
 void pcm_dma_apply_settings(void)
 {
-    /* Rockbox calls this when sample rate / format changes. We re-apply the
-     * mem-IF attr on the next stream_start; nothing to do here unless the
-     * stream is already running and we need a live re-configure. */
+    /* Called on sample-rate / format change. Audio is locked to 44.1 / 16 /
+     * stereo; nothing to do here unless we later wire SET_ANAAFE_REG. */
 }
