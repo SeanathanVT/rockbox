@@ -662,9 +662,12 @@ ypr0cc () {
 # unaligned access is fine).
 armv7alinuxcc () {
  GCCOPTS=`echo $CCOPTS | sed -e s/-ffreestanding// -e s/-nostdlib//`
- # Force ARM mode (not Thumb-2); pre-existing Rockbox inline asm in the codec
- # libs uses traditional pre-Thumb-2 conditional instructions without IT blocks.
- GCCOPTS="$GCCOPTS -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -marm"
+ # -mword-relocations: emit R_ARM_ABS32 (literal-pool loads) instead of
+ #   MOVW/MOVT pairs, which the codec linker script can't resolve.
+ # -marm: codec inline asm (libtremor/asm_arm.h, ...) predates Thumb-2 IT
+ #   blocks. The proper rockboxdev.sh toolchain defaults to ARM mode but
+ #   keep the flag explicit for clarity.
+ GCCOPTS="$GCCOPTS -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -marm -mword-relocations"
  GCCOPTIMIZE=''
  LDOPTS="-lpthread -lm -ldl -lrt $LDOPTS"
  GLOBAL_LDOPTS="$GLOBAL_LDOPTS -Wl,-z,defs"

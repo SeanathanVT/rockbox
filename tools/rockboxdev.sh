@@ -794,6 +794,7 @@ if [ -z "$RBDEV_TARGET" ]; then
     echo "a   - arm      (ipods, iriver H10, Sansa, D2, Gigabeat, older Sony NWZ, etc)"
     echo "i   - mips     (Jz47xx/x1000 based players)"
     echo "x   - arm-linux  (Generic Linux ARM: Samsung ypr0, Linux-based Sony NWZ)"
+    echo "h   - armhf-linux (Hard-float ARM Linux: Innioasis Y1)"
     echo "y   - mips-linux  (Generic Linux MIPS: eg the many HiBy-OS targets)"
     echo "separate multiple targets with spaces"
     echo "(Example: \"m a i\" will build m68k, arm, and mips)"
@@ -861,6 +862,27 @@ do
             extract "alsa-lib-$alsalib_ver"
             prefix="/usr" buildtool "alsa-lib" "$alsalib_ver" \
                 "--host=$target --disable-python" "" "install DESTDIR=$prefix/$target/sysroot"
+            ;;
+        [Hh])
+            # IMPORTANT NOTE
+            # Hard-float ARM Linux toolchain (gnueabihf).
+            #
+            # Innioasis Y1:
+            #   SoC:    MediaTek MT6572 (dual Cortex-A7, NEON + VFPv4)
+            #   kernel: 3.4.5 (BSP)
+            #   glibc:  device runs no glibc — Rockbox is hosted-Linux on a
+            #           native rootfs we ship, so we target the oldest viable
+            #           ABI (2.4) under a recent 2.6.32 LTS kernel.
+            #
+            # gcc defaults to armv7-a + cortex-a7 + neon-vfpv4 + hard-float so
+            # any target call site that doesn't override -march/-mcpu still
+            # produces the right ABI.
+            glibcopts="--enable-kernel=2.6.23 --enable-oldest-abi=2.4"
+            # --with-cpu pulls in the matching arch + tune; do not also pass
+            # --with-arch (gcc's config.gcc rejects the combination).
+            gccopts="--with-cpu=cortex-a7 --with-fpu=neon-vfpv4 --with-float=hard"
+            build_linux_toolchain "arm-rockbox-linux-gnueabihf" "2.38" "" "" "9.5.0" \
+                "$gccopts" "2.6.32.71" "" "2.20" "$glibcopts" "glibc-220-make44.patch glibc-2.20-gcc10.patch"
             ;;
         [Yy])
             # IMPORTANT NOTE
