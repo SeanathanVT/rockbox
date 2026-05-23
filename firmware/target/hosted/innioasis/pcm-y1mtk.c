@@ -1,33 +1,47 @@
 /*
  * Innioasis Y1 — PCM driver for MediaTek MT6572 /dev/eac.
  *
- * The kernel-side audio is the MTK "EAC" character device (`misc 10:46`,
- * magic 'C'). Music playback is a blocking write(2) on /dev/eac; the kernel's
- * AudDrv_write copy_from_user's into the AFE DL1 ring buffer, and the AFE
- * DMA engine pulls from the same ring on its IRQ1 wakeup.
+ * Music playback is a blocking write(2) on /dev/eac; the kernel's AudDrv_write
+ * copy_from_user's into the AFE DL1 ring buffer, and the AFE DMA engine pulls
+ * from the same ring on its IRQ1 wakeup.
  *
- * The wrinkle: AUD_RESTART zeros AFE_DAC_CON0/CON1/IRQ_CON. Skipping the
- * register reprogram leaves the DAC clock-gated and produces silence. The
- * full open path matches the MTK HAL (libaudio.primary.default.so):
+ * AUD_RESTART zeros the AFE register block, so the driver re-programs
+ * everything to the values stock HAL uses during music playback (captured
+ * on-device via boot-test/afe_dump idle/playing diff 2026-05-23):
  *
  *   open /dev/eac
  *   AUD_RESTART
  *   ALLOCATE_MEMIF_DL1(ring_size)
- *   AUD_SET_CLOCK(1) + AUD_SET_ANA_CLOCK(1)     # codec/DAC enable side
- *   SET_AUDSYS_REG AFE_DAC_CON1  = 9 / 0xf      # 44.1k sample-rate index
- *   SET_AUDSYS_REG AFE_IRQ_CON   = 0x90 / 0xf0  # IRQ1 sample-rate bits
- *   SET_AUDSYS_REG AFE_IRQ_CNT1  = period / ~0  # 10 ms (441 samples)
- *   SET_AUDSYS_REG AFE_IRQ_CON   = 1 / 1        # IRQ1 enable
- *   SET_AUDSYS_REG AFE_CONN[6]                  # I05/I06 -> O03/O04 route
- *   SET_AUDSYS_REG AFE_I2S_CON1  = config       # 16-bit, master, normal
- *   SET_AUDSYS_REG AFE_I2S_CON1  = 1 / 1        # I2S OUT enable
- *   SET_HEADPHONE_ON(1)
+ *   AUD_SET_CLOCK(1) + AUD_SET_ANA_CLOCK(1)
+ *
+ *   SET_AUDSYS_REG AFE_DAC_CON1          = 0x9        / 0xf
+ *   SET_AUDSYS_REG AFE_IRQ_CON           = 0x90       / 0xf0
+ *   SET_AUDSYS_REG AFE_IRQ_CNT1          = 0x800      / ~0
+ *   SET_AUDSYS_REG AFE_IRQ_CON           = 0x1        / 0x1
+ *   SET_AUDSYS_REG AFE_CONN1             = 0x00200000 / 0x00200000
+ *   SET_AUDSYS_REG AFE_CONN2             = 0x40       / 0x40
+ *   SET_AUDSYS_REG AFE_I2S_CON1          = 0x0909     / 0xffff
+ *   SET_AUDSYS_REG AFE_ADDA_DL_SRC2_CON0 = 0x73001803 / ~0
+ *   SET_AUDSYS_REG AFE_ADDA_UL_DL_CON0   = 0x1        / 0x1
+ *   SET_AUDSYS_REG AFE_IRQ_MCU_EN        = 0x639      / 0xffff
+ *   SET_ANAAFE_REG ANA 0x108             = 0x12bf     / 0xffff
+ *   SET_ANAAFE_REG ANA 0x194             = 0x0074     / 0xffff
+ *
+ *   SET_SPEAKER_ON(1) + SET_HEADPHONE_ON(1)
  *   START_MEMIF_TYPE(MEM_DL1)
- *   SET_AUDSYS_REG AFE_DAC_CON0  = 2 / 2        # DL1 memif fetch enable (bit 1)
+ *   SET_AUDSYS_REG AFE_DAC_CON0          = 0x3402     / 0x3402
+ *
  *   write(2) loop ...
  *
- * Pause keeps the alloc + route + clocks; toggles DAC fetch bit + STANDBY.
- * See docs/audio-stack.md for the full RE.
+ * KNOWN-INSUFFICIENT (2026-05-23): the above sequence runs cleanly but
+ * produces no audible output on hardware.  Steady-state register values match
+ * stock playback byte-for-byte, but the codec analog stage doesn't pass the
+ * signal through.  Suspected missing piece: a temporal codec power-up
+ * sequence (charge-pump -> settle -> DAC -> settle -> un-mute) that the
+ * steady-state dump can't reveal.  Next investigation: strace mediaserver
+ * during stock playback start to capture the write order + intermediate
+ * codec values.  See docs/audio-stack.md "Open items still on the audio
+ * path" for the full follow-up plan.
  */
 
 #include "config.h"
@@ -67,6 +81,9 @@
 #define STANDBY_MEMIF_TYPE      _AUD_IOWR(0x21, 4)
 #define AUD_SET_CLOCK           _AUD_IOWR(0x51, 4)
 #define AUD_SET_ANA_CLOCK       _AUD_IOWR(0x55, 4)
+#define SET_ANAAFE_REG          _AUD_IOWR(0x02, 4)  /* MT6323 codec write */
+#define SET_SPEAKER_ON          _AUD_IOW (0xa1, 4)
+#define SET_SPEAKER_OFF         _AUD_IOW (0xa2, 4)
 #define SET_HEADPHONE_ON        _AUD_IOW (0xa4, 4)
 #define SET_HEADPHONE_OFF       _AUD_IOW (0xa5, 4)
 
@@ -78,6 +95,11 @@
 #define AFE_DAC_CON0            0x010
 #define AFE_DAC_CON1            0x014
 #define AFE_CONN0               0x020
+#define AFE_CONN1               0x024
+#define AFE_CONN2               0x028
+#define AFE_ADDA_DL_SRC2_CON0   0x108
+#define AFE_ADDA_UL_DL_CON0     0x124
+#define AFE_IRQ_MCU_EN          0x3C0
 #define AFE_I2S_CON1            0x034
 #define AFE_IRQ_CON             0x3A0
 #define AFE_IRQ_CNT1            0x3AC
@@ -88,8 +110,9 @@
 /* Sample-rate index in the MTK AFE SR table (44100 -> 9). */
 #define EAC_SR_IDX_44100        9
 
-/* IRQ1 period in samples — MTK convention is sample_rate/100 = 10 ms tick. */
-#define EAC_IRQ1_PERIOD_44100   441
+/* IRQ1 period in samples — stock HAL uses 0x800 = 2048 samples (~46 ms at
+ * 44.1k) per on-device afe_dump capture, not the SR/100 convention. */
+#define EAC_IRQ1_PERIOD_44100   0x800
 
 /* SET_AUDSYS_REG payload (struct copy-in from userspace). */
 struct register_control {
@@ -166,14 +189,33 @@ static void eac_clocks_hold(bool on)
     clocks_held = on;
 }
 
-static void eac_route_headphone(bool on)
+static void eac_route_analog(bool on)
 {
     if (eac_fd < 0 || on == route_active)
         return;
-    int cmd = on ? SET_HEADPHONE_ON : SET_HEADPHONE_OFF;
-    if (ioctl(eac_fd, cmd, on ? 1 : 0) < 0)
+    /* Y1 has an internal speaker (default output) AND a 3.5mm headphone
+     * jack. Enable both routes; the codec accdet logic auto-selects which
+     * amp is active based on jack-detect state. */
+    int spk = on ? SET_SPEAKER_ON   : SET_SPEAKER_OFF;
+    int hp  = on ? SET_HEADPHONE_ON : SET_HEADPHONE_OFF;
+    if (ioctl(eac_fd, spk, on ? 1 : 0) < 0)
+        logf("eac route spk=%d: %s", on, strerror(errno));
+    if (ioctl(eac_fd, hp,  on ? 1 : 0) < 0)
         logf("eac route hp=%d: %s", on, strerror(errno));
     route_active = on;
+}
+
+/* MT6323 codec write via SET_ANAAFE_REG (0xC0044302). Same struct shape as
+ * SET_AUDSYS_REG but targets the analog codec on MT6323 rather than the
+ * digital AFE block. */
+static int codec_write(uint32_t offset, uint32_t value, uint32_t mask)
+{
+    struct register_control r = { offset, value, mask };
+    int rc = ioctl(eac_fd, SET_ANAAFE_REG, &r);
+    if (rc < 0)
+        logf("codec_write off=0x%x val=0x%x mask=0x%x: %s",
+             offset, value, mask, strerror(errno));
+    return rc;
 }
 
 static void eac_configure_afe_44k_stereo(void)
@@ -181,48 +223,42 @@ static void eac_configure_afe_44k_stereo(void)
     if (afe_configured || eac_fd < 0)
         return;
 
-    /* Sample rate index for DL1. */
+    /* Register values verified on-device via afe_dump idle/playing diff
+     * (boot-test/afe_dump.c).  See docs/audio-stack.md for the live-
+     * captured stock-playback values these mirror. */
     afe_write(AFE_DAC_CON1, EAC_SR_IDX_44100, 0xf);
-
-    /* IRQ1 — sample-rate bits then period then enable. The enable must be
-     * a separate write because the kernel's IRQ-on path latches off the
-     * enable bit transition. */
     afe_write(AFE_IRQ_CON,  EAC_SR_IDX_44100 << 4, 0xf0);
     afe_write(AFE_IRQ_CNT1, EAC_IRQ1_PERIOD_44100, 0xffffffff);
     afe_write(AFE_IRQ_CON,  0x1, 0x1);
 
-    /* AFE_CONN routing matrix: wire I05/I06 (DL1 L/R) -> O03/O04 (DAC L/R).
-     * The HAL builds these from a (in,out) connection table at runtime;
-     * the exact bit positions need an on-device GET_AUDSYS_REG dump to
-     * confirm against Y1 silicon. Standard MT6572 layout (per BSP source
-     * AudDrv_Afe.c::SetinputConnection) is two bits per (in,out) pair in
-     * the AFE_CONNx register block starting at 0x020. Placeholder values
-     * here program the canonical DL1->DAC L/R route; if no sound after
-     * smoke-test, dump the stock state under Android playback and patch.
-     * TODO(hw): confirm AFE_CONN[0..3] values. */
-    afe_write(AFE_CONN0 + 0x4, 0x00000001, 0x00000001); /* I05 -> O03 */
-    afe_write(AFE_CONN0 + 0x8, 0x00000004, 0x00000004); /* I06 -> O04 */
+    /* AFE_CONN routing matrix: AFE_CONN1 bit 21 + AFE_CONN2 bit 6 are the
+     * exact bits stock HAL sets for DL1 L/R -> DAC L/R on MT6572.  Not
+     * what naive interpretation of MTK docs suggests; verified by live
+     * dump during stock playback. */
+    afe_write(AFE_CONN1, 0x00200000, 0x00200000);
+    afe_write(AFE_CONN2, 0x00000040, 0x00000040);
 
-    /* AFE_I2S_CON1 — 16-bit, master, normal phase, then enable.
-     * Bit layout (from MTK AFE convention):
-     *   [31..16] reserved
-     *   [15..12] sample-rate (= SR_IDX, 9 for 44.1k)
-     *   [11..8]  reserved
-     *   [7..6]   I2S format (00 = I2S, 01 = LJ, 10 = RJ)
-     *   [5]      WLEN: 0 = 16-bit, 1 = 32-bit
-     *   [4]      I2S phase: 0 = normal
-     *   [3]      I2S master: 1 = master
-     *   [2..1]   reserved
-     *   [0]      I2S OUT enable (set in a second write so config latches first)
-     */
-    uint32_t i2s_cfg =
-          (EAC_SR_IDX_44100 << 12)
-        | (0 << 6)   /* I2S format */
-        | (0 << 5)   /* 16-bit WLEN */
-        | (0 << 4)   /* normal phase */
-        | (1 << 3);  /* master */
-    afe_write(AFE_I2S_CON1, i2s_cfg, 0xffff);
-    afe_write(AFE_I2S_CON1, 0x1, 0x1);
+    /* I2S_CON1: stock value 0x0909 (bit 0 = OUT enable included). */
+    afe_write(AFE_I2S_CON1, 0x0909, 0xffff);
+
+    /* ADDA registers -- stock playback shows these are set even though
+     * subagent RE suggested kernel handles them via AUD_SET_ANA_CLOCK. */
+    afe_write(AFE_ADDA_DL_SRC2_CON0, 0x73001803, 0xffffffff);
+    afe_write(AFE_ADDA_UL_DL_CON0,   0x00000001, 0x00000001);
+
+    /* IRQ-MCU enable -- stock 0x639; required for AFE IRQ to reach
+     * AudDrv_write's wait_event wakeup. */
+    afe_write(AFE_IRQ_MCU_EN, 0x639, 0xffff);
+
+    /* MT6323 codec writes -- diff between stock idle/playing reveals these
+     * two move during playback.  Likely related to analog-path un-mute +
+     * gain/buffer config.  KNOWN INSUFFICIENT: smoke test runs cleanly
+     * with these values but produces no audible output, suggesting a
+     * temporal codec power-up sequence we haven't captured yet (charge-
+     * pump -> settle -> DAC -> settle -> un-mute).  Next step: strace
+     * mediaserver during stock playback start to capture write order. */
+    codec_write(0x108, 0x12bf, 0xffff);
+    codec_write(0x194, 0x0074, 0xffff);
 
     afe_configured = true;
 }
@@ -242,9 +278,12 @@ static void eac_dl1_enable(bool on)
 {
     if (eac_fd < 0 || on == dl1_running)
         return;
-    /* AFE_DAC_CON0 bit 1 = DL1 memif fetch enable. The bit 0 below it
-     * (DAC engine enable) is kernel-managed via AUD_SET_ANA_CLOCK. */
-    afe_write(AFE_DAC_CON0, on ? 0x2 : 0x0, 0x2);
+    /* AFE_DAC_CON0 stock-live value during playback is 0x3403:
+     *   bit 0  = DAC engine enable (kernel-managed via AUD_SET_ANA_CLOCK)
+     *   bit 1  = DL1 memif fetch enable
+     *   bits 10/12/13 = output routing (0x3400)
+     * Write the routing bits + DL1 enable; bit 0 stays kernel-controlled. */
+    afe_write(AFE_DAC_CON0, on ? 0x3402 : 0x0, 0x3402);
     dl1_running = on;
 }
 
@@ -255,7 +294,7 @@ static void stream_start(void)
     eac_alloc_dl1();
     eac_clocks_hold(true);
     eac_configure_afe_44k_stereo();
-    eac_route_headphone(true);
+    eac_route_analog(true);
     if (ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1) < 0)
         logf("eac START_MEMIF: %s", strerror(errno));
     eac_dl1_enable(true);
@@ -273,7 +312,7 @@ static void stream_stop(bool teardown)
         return;
     /* Full close — drop AFE config, route, clocks, alloc. */
     eac_deconfigure_afe();
-    eac_route_headphone(false);
+    eac_route_analog(false);
     eac_clocks_hold(false);
     eac_free_dl1();
 }
