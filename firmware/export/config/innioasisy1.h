@@ -43,6 +43,7 @@
 #define BRIGHTNESS_STEP            5
 #define DEFAULT_BRIGHTNESS_SETTING 200
 #define CONFIG_BACKLIGHT_FADING    BACKLIGHT_FADING_SW_SETTING
+#define BACKLIGHT_LEDS_LCD
 
 /* Buttons: 5 capacitive nav buttons via mtk-tpd; power via mtk-kpd */
 #define CONFIG_KEYPAD              INNIOASIS_Y1_PAD
@@ -68,6 +69,13 @@
 #define BATTERY_CAPACITY_INC     0
 #define BATTERY_DEV_NAME         "battery"
 #define POWER_DEV_NAME           "usb"
+
+/* MT6572 power_supply class exposes batt_vol (mV, raw — no scaling needed)
+ * instead of the standard voltage_now (µV). Override the path and disable
+ * the µV→mV divide that power-linux.c does by default. */
+#define BATTERY_VOLTAGE_PATH      "/sys/class/power_supply/battery/batt_vol"
+#define BATTERY_VOLTAGE_SCALE_MUL 1
+#define BATTERY_VOLTAGE_SCALE_DIV 1
 
 #define CURRENT_NORMAL    100
 #define CURRENT_BACKLIGHT 180
