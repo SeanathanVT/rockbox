@@ -205,6 +205,29 @@ target/hosted/surfans/surfanslinux_codec.c
 #endif
 #endif
 
+#if defined(INNIOASIS_Y1) && !defined(SIMULATOR)
+/* Shared hosted-Linux infrastructure (subset of HIBY_LINUX block — Y1 is hosted-Linux
+ * but does NOT use ALSA; audio goes through a separate /dev/eac driver). */
+target/hosted/backtrace-glibc.c
+target/hosted/filesystem-unix.c
+target/hosted/kernel-unix.c
+target/hosted/lc-unix.c
+target/hosted/sysfs.c
+target/hosted/backlight-unix.c
+target/hosted/system-hosted.c
+target/hosted/lcd-linuxfb.c
+target/hosted/power-linux.c
+target/hosted/button-devinput.c
+drivers/lcd-memframe.c
+/* Y1-specific */
+target/hosted/innioasis/button-y1.c
+target/hosted/innioasis/debug-y1.c
+target/hosted/innioasis/powermgmt-y1.c
+#if !defined(BOOTLOADER)
+target/hosted/innioasis/pcm-y1mtk.c
+#endif
+#endif
+
 #if (defined(XDUOO_X3II) || defined(XDUOO_X20)) && !defined(SIMULATOR)
 target/hosted/xduoo/button-xduoo.c
 target/hosted/xduoo/debug-xduoo.c

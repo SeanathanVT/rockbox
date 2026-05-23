@@ -158,6 +158,7 @@
 #define RG_NANO_PAD        77
 #define CTRU_PAD           78
 #define HIBY_R3PROII_PAD   79
+#define INNIOASIS_Y1_PAD   80
 
 /* CONFIG_REMOTE_KEYPAD */
 #define H100_REMOTE   1
