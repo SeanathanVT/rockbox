@@ -151,7 +151,8 @@ enum {
 #define MAX_FPS         40
 
 /* 22x22 bubbles (iPod Video) */
-#elif (LCD_HEIGHT == 240) && (LCD_WIDTH == 320)
+#elif ((LCD_HEIGHT == 240) && (LCD_WIDTH == 320)) || \
+      ((LCD_HEIGHT == 360) && (LCD_WIDTH == 480))
 #define XOFS          72
 #define MAX_FPS       40
 
