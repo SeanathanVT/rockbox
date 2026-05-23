@@ -309,16 +309,40 @@ static void eac_afe_final_phase6(void)
     afe_write(0x010, 0x00000002, 0x00000002);    /* DAC_CON0: DL DAC enable */
 }
 
+/* Codec ramp-down captured from the stock session teardown 2026-05-23.
+ * Companion to eac_codec_ramp_phase3.  Resets MT6323 gain, mutes the
+ * analog path, drops the codec DAC enable.  Pop-free shutdown depends
+ * on running this before any AFE clear. */
+static void eac_codec_rampdown(void)
+{
+    codec_write(0x70a, 0x00000014, 0xffffffff);
+    codec_write(0x70c, 0x0000f7f2, 0xffffffff);
+    codec_write(0x708, 0x00000000, 0xffffffff);
+    codec_write(0x700, 0x00000000, 0xffff1000);
+    codec_write(0x70c, 0x000037e2, 0xffffffff);
+    codec_write(0x4000, 0x00000000, 0xffff0001);   /* codec DAC disable */
+    codec_write(0x10a, 0x00000100, 0xffff0100);
+    codec_write(0x10a, 0x00000100, 0xffff0100);    /* stock writes it twice */
+}
+
+/* Full AFE teardown captured from the stock session 2026-05-23.  Order
+ * matches stock; 0x4c4 bit 4 is SET here (cleared in eac_afe_config_phase1
+ * -- it's a mute/hold gate). */
 static void eac_deconfigure_afe(void)
 {
     if (!afe_configured || eac_fd < 0)
         return;
-    /* Drop the DL DAC + AFE enable bits first, then I2S OUT and IRQ1.
-     * Kernel zeros the rest of AFE_DAC_CON0/CON1/IRQ_CON on the next
-     * AUD_RESTART so we don't need to clear every config bit. */
-    afe_write(0x010, 0x00000000, 0x00000003);
-    afe_write(0x034, 0x00000000, 0x00000001);
-    afe_write(0x3a0, 0x00000000, 0x00000001);
+    afe_write(0x024, 0x00000000, 0x00200000);    /* clear CONN1 DL1 route */
+    afe_write(0x028, 0x00000000, 0x00000040);    /* clear CONN2 DL1 route */
+    afe_write(0x010, 0x00000000, 0x00000400);    /* clear DAC_CON0 bit 10 */
+    afe_write(0x108, 0x00000000, 0x00000001);    /* clear DL_SRC2_CON0 enable */
+    afe_write(0x034, 0x00000000, 0x00000001);    /* clear I2S_CON1 OUT enable */
+    afe_write(0x108, 0x00000000, 0x00000001);    /* (twice, like start) */
+    afe_write(0x124, 0x00000000, 0x00000001);    /* clear UL_DL_CON0 */
+    afe_write(0x4c4, 0x00000010, 0x00000010);    /* SET bit 4 (mute/hold gate) */
+    afe_write(0x010, 0x00000000, 0x00000002);    /* clear DAC_CON0 DL DAC bit */
+    afe_write(0x3a0, 0x00000000, 0x00000001);    /* clear IRQ1 enable */
+    afe_write(0x010, 0x00000000, 0x00000001);    /* clear DAC_CON0 AFE enable */
     afe_configured = false;
 }
 
@@ -382,16 +406,26 @@ static void stream_stop(bool teardown)
 {
     if (!stream_running || eac_fd < 0)
         return;
-    eac_dl1_enable(false);
-    ioctl(eac_fd, STANDBY_MEMIF_TYPE, MEM_DL1);
+
+    if (teardown) {
+        /* Full close: mirror the captured stock teardown.  Order:
+         * codec ramp-down -> AFE clear -> amp routes off -> STANDBY
+         * -> clocks off -> DL1 free.  The codec ramp + AFE 0x4c4 bit 4
+         * "mute/hold gate" set are the difference between a quiet stop
+         * and a pop-on-stop. */
+        eac_codec_rampdown();
+        eac_deconfigure_afe();
+        eac_route_analog(false);
+        ioctl(eac_fd, STANDBY_MEMIF_TYPE, MEM_DL1);
+        eac_clocks_hold(false);
+        eac_free_dl1();
+    } else {
+        /* Light pause: leave codec + amp + AFE config in place so
+         * resume is cheap.  Just stop fetching from the ring. */
+        eac_dl1_enable(false);
+        ioctl(eac_fd, STANDBY_MEMIF_TYPE, MEM_DL1);
+    }
     stream_running = false;
-    if (!teardown)
-        return;
-    /* Full close -- drop AFE config, route, clocks, alloc. */
-    eac_deconfigure_afe();
-    eac_route_analog(false);
-    eac_clocks_hold(false);
-    eac_free_dl1();
 }
 
 /* -------------------------------------------------------------------------- */
