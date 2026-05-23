@@ -72,7 +72,8 @@ enum {
 
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 #define BJACK_SELECT_NAME    "SELECT"
 #define BJACK_STAY_NAME     "RIGHT"
 #define BJACK_RESUME_NAME   "PLAY"
@@ -1210,6 +1211,7 @@ static signed int blackjack_get_amount(const char *message,
 #if (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
       (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD) || \
       (CONFIG_KEYPAD == SANSA_E200_PAD) || \
       (CONFIG_KEYPAD == SANSA_FUZE_PAD) || \
       (CONFIG_KEYPAD == SANSA_CONNECT_PAD) || \
