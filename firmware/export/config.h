@@ -582,6 +582,8 @@ Lyre prototype 1 */
 #include "config/hibyr3proii.h"
 #elif defined(HIBY_R1)
 #include "config/hibyr1.h"
+#elif defined(INNIOASIS_Y1)
+#include "config/innioasisy1.h"
 #else
 #error "unknown hardware platform!"
 #endif

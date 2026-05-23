@@ -60,8 +60,13 @@ static void sig_handler(int sig, siginfo_t *siginfo, void *context)
 
     /* get context info */
     ucontext_t *uc = (ucontext_t *)context;
+#if defined(__arm__)
+    unsigned long pc = uc->uc_mcontext.arm_pc;
+    unsigned long sp = uc->uc_mcontext.arm_sp;
+#else
     unsigned long pc = uc->uc_mcontext.pc;
     unsigned long sp = uc->uc_mcontext.gregs[29];
+#endif
 
     lcd_putsf(0, line++, "%s at %08lx", strsignal(sig), pc);
 

@@ -89,7 +89,7 @@
 /* RTC handled by hosted-Linux layer */
 #define CONFIG_RTC RTC_HOSTED
 
-/* Storage: HOSTFS only — /storage/sdcard0 (internal) + /storage/sdcard1 (microSD) */
+/* Storage: HOSTFS only — internal eMMC (mmcblk0) + microSD (mmcblk1) */
 #define CONFIG_STORAGE          STORAGE_HOSTFS
 #define HOSTFS_VOL_DEC          "microSD"
 #define HAVE_STORAGE_FLUSH
@@ -97,6 +97,10 @@
 #define NUM_DRIVES              2
 #define HAVE_HOTSWAP
 #define HAVE_HOTSWAP_STORAGE_AS_MAIN
+#define PIVOT_ROOT              "/storage/sdcard0"
+#define MULTIDRIVE_DIR          "/storage/sdcard1"
+#define ROOTDRIVE_DEV           "/sys/block/mmcblk0"
+#define MULTIDRIVE_DEV          "/sys/block/mmcblk1"
 
 /* Audio — MTK custom (/dev/eac). Driver is stub until RE complete (see docs/audio-re-progress.md) */
 #define HAVE_Y1MTK_CODEC

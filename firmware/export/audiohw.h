@@ -245,6 +245,8 @@ struct sound_settings_info
 #include "echoplayer_codec.h"
 #elif defined(HAVE_HIBY_LINUX_CODEC)
 #include "hibylinux_codec.h"
+#elif defined(HAVE_Y1MTK_CODEC)
+#include "y1mtk_codec.h"
 #endif
 
 #if defined(HAVE_X1000_ICODEC_REC) && !defined(HAVE_X1000_ICODEC_PLAY)
