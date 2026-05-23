@@ -7,6 +7,11 @@
 #ifndef __LCD_TARGET_H__
 #define __LCD_TARGET_H__
 
+/* lcd-linuxfb.c provides lcd_update / lcd_update_rect; suppress the generic
+ * versions in lcd-memframe.c. */
+#define LCD_OPTIMIZED_UPDATE
+#define LCD_OPTIMIZED_UPDATE_RECT
+
 extern fb_data *framebuffer; /* defined in lcd-linuxfb.c */
 #define LCD_FRAMEBUF_ADDR(col, row) (framebuffer + (row) * LCD_WIDTH + (col))
 

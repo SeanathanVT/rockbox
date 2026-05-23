@@ -50,6 +50,8 @@
 #include "button.h"
 #include "pcm.h"
 #include "pcm-internal.h"
+#include "pcm_sampr.h"
+#include "pcm_sink.h"
 #include "system.h"
 #include "kernel.h"
 #include "panic.h"
@@ -552,20 +554,38 @@ void audiohw_mute(int mute)
 }
 
 /* -------------------------------------------------------------------------- */
-/* pcm-internal interface                                                     */
+/* pcm_sink interface — entry points the core calls through builtin_pcm_sink. */
 
-void pcm_play_dma_init(void)
+static void sink_dma_init(void)
 {
+    audiohw_preinit();
+
     worker_quit = false;
     if (pthread_create(&worker_tid, NULL, worker_main, NULL) != 0)
         panicf("pcm-y1mtk: pthread_create failed");
 }
 
-void pcm_play_dma_postinit(void)
+static void sink_dma_postinit(void)
 {
+    audiohw_postinit();
 }
 
-void pcm_play_dma_start(const void *addr, size_t size)
+static void sink_lock(void)
+{
+    pthread_mutex_lock(&worker_mtx);
+}
+
+static void sink_unlock(void)
+{
+    pthread_mutex_unlock(&worker_mtx);
+}
+
+static void sink_set_freq(uint16_t freq)
+{
+    audiohw_set_frequency(freq);
+}
+
+static void sink_dma_start(const void *addr, size_t size)
 {
     if (eac_fd < 0 || !addr || !size)
         return;
@@ -581,7 +601,7 @@ void pcm_play_dma_start(const void *addr, size_t size)
     pthread_mutex_unlock(&worker_mtx);
 }
 
-void pcm_play_dma_stop(void)
+static void sink_dma_stop(void)
 {
     pthread_mutex_lock(&worker_mtx);
     worker_run = false;
@@ -593,41 +613,19 @@ void pcm_play_dma_stop(void)
     stream_stop(false);
 }
 
-void pcm_play_dma_pause(bool pause)
-{
-    /* Pause toggles only the DL1 fetch bit + memif standby. Keeps the
-     * route, clocks and AFE config primed for fast resume. */
-    worker_paused = pause;
-    if (pause) {
-        eac_dl1_enable(false);
-        if (eac_fd >= 0)
-            ioctl(eac_fd, STANDBY_MEMIF_TYPE, MEM_DL1);
-    } else if (stream_running) {
-        if (eac_fd >= 0)
-            ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1);
-        eac_dl1_enable(true);
-    }
-}
-
-size_t pcm_get_bytes_waiting(void)
-{
-    size_t s;
-    pthread_mutex_lock(&worker_mtx);
-    s = cur_size;
-    pthread_mutex_unlock(&worker_mtx);
-    return s;
-}
-
-const void *pcm_play_dma_get_peak_buffer(int *count)
-{
-    pthread_mutex_lock(&worker_mtx);
-    const void *p = cur_addr;
-    *count = (int)(cur_size / 4);   /* frames = bytes / (2 ch * 2 bytes) */
-    pthread_mutex_unlock(&worker_mtx);
-    return p;
-}
-
-void pcm_dma_apply_settings(void)
-{
-    /* Sample-rate / format change. Locked to 44.1/16/stereo for now. */
-}
+struct pcm_sink builtin_pcm_sink = {
+    .caps = {
+        .samprs       = hw_freq_sampr,
+        .num_samprs   = HW_NUM_FREQ,
+        .default_freq = HW_FREQ_DEFAULT,
+    },
+    .ops = {
+        .init     = sink_dma_init,
+        .postinit = sink_dma_postinit,
+        .set_freq = sink_set_freq,
+        .lock     = sink_lock,
+        .unlock   = sink_unlock,
+        .play     = sink_dma_start,
+        .stop     = sink_dma_stop,
+    },
+};

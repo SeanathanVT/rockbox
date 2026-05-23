@@ -223,6 +223,7 @@ drivers/lcd-memframe.c
 target/hosted/innioasis/button-y1.c
 target/hosted/innioasis/debug-y1.c
 target/hosted/innioasis/powermgmt-y1.c
+target/hosted/innioasis/usb-y1.c
 #if !defined(BOOTLOADER)
 target/hosted/innioasis/pcm-y1mtk.c
 #endif
