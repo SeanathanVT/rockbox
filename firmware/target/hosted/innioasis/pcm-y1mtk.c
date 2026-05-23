@@ -47,6 +47,7 @@
 #include "config.h"
 #include "audio.h"
 #include "audiohw.h"
+#include "button.h"
 #include "pcm.h"
 #include "pcm-internal.h"
 #include "system.h"
@@ -193,16 +194,37 @@ static void eac_route_analog(bool on)
 {
     if (eac_fd < 0 || on == route_active)
         return;
-    /* Y1 has an internal speaker (default output) AND a 3.5mm headphone
-     * jack. Enable both routes; the codec accdet logic auto-selects which
-     * amp is active based on jack-detect state. */
-    int spk = on ? SET_SPEAKER_ON   : SET_SPEAKER_OFF;
-    int hp  = on ? SET_HEADPHONE_ON : SET_HEADPHONE_OFF;
-    if (ioctl(eac_fd, spk, on ? 1 : 0) < 0)
-        logf("eac route spk=%d: %s", on, strerror(errno));
-    if (ioctl(eac_fd, hp,  on ? 1 : 0) < 0)
-        logf("eac route hp=%d: %s", on, strerror(errno));
+    /* Kernel accdet does NOT auto-mute the inactive route: validated on
+     * 2026-05-23 -- enabling both SET_SPEAKER_ON and SET_HEADPHONE_ON
+     * makes the tone play out of both at once.  Userspace has to pick
+     * the right amp based on the jack-detect sysfs.  button-y1.c's
+     * headphones_inserted() reads /sys/class/switch/h2w/state. */
+    if (on) {
+        bool hp = headphones_inserted();
+        if (ioctl(eac_fd, hp ? SET_SPEAKER_OFF   : SET_SPEAKER_ON,   hp ? 0 : 1) < 0)
+            logf("eac spk: %s", strerror(errno));
+        if (ioctl(eac_fd, hp ? SET_HEADPHONE_ON  : SET_HEADPHONE_OFF, hp ? 1 : 0) < 0)
+            logf("eac hp: %s", strerror(errno));
+    } else {
+        if (ioctl(eac_fd, SET_SPEAKER_OFF,   0) < 0)
+            logf("eac spk off: %s", strerror(errno));
+        if (ioctl(eac_fd, SET_HEADPHONE_OFF, 0) < 0)
+            logf("eac hp off: %s", strerror(errno));
+    }
     route_active = on;
+}
+
+/* Re-route mid-stream when jack state changes.  Caller responsible for
+ * detecting the transition (poll /sys/class/switch/h2w/state on the
+ * worker thread or in a button-driver hook).  Both ioctls are cheap
+ * (single SET on the amp HW) so we just blast both with the new state. */
+void pcm_y1mtk_jack_reroute(void)
+{
+    if (eac_fd < 0 || !route_active)
+        return;
+    bool hp = headphones_inserted();
+    ioctl(eac_fd, hp ? SET_SPEAKER_OFF   : SET_SPEAKER_ON,   hp ? 0 : 1);
+    ioctl(eac_fd, hp ? SET_HEADPHONE_ON  : SET_HEADPHONE_OFF, hp ? 1 : 0);
 }
 
 /* MT6323 codec write via SET_ANAAFE_REG (0xC0044302). Same struct shape as
