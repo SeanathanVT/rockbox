@@ -35,11 +35,21 @@
 
 #ifdef BATTERY_DEV_NAME
 # define BATTERY_SYSFS_PATH     "/sys/class/power_supply/" BATTERY_DEV_NAME
-# define BATTERY_STATUS_PATH    BATTERY_SYSFS_PATH "/status"
-# define BATTERY_VOLTAGE_PATH   BATTERY_SYSFS_PATH "/voltage_now"
-# define BATTERY_CURRENT_PATH   BATTERY_SYSFS_PATH "/current_now"
-# define BATTERY_LEVEL_PATH     BATTERY_SYSFS_PATH "/capacity"
-# define BATTERY_TTE_PATH       BATTERY_SYSFS_PATH "/time_to_empty_now"
+# ifndef BATTERY_STATUS_PATH
+#  define BATTERY_STATUS_PATH   BATTERY_SYSFS_PATH "/status"
+# endif
+# ifndef BATTERY_VOLTAGE_PATH
+#  define BATTERY_VOLTAGE_PATH  BATTERY_SYSFS_PATH "/voltage_now"
+# endif
+# ifndef BATTERY_CURRENT_PATH
+#  define BATTERY_CURRENT_PATH  BATTERY_SYSFS_PATH "/current_now"
+# endif
+# ifndef BATTERY_LEVEL_PATH
+#  define BATTERY_LEVEL_PATH    BATTERY_SYSFS_PATH "/capacity"
+# endif
+# ifndef BATTERY_TTE_PATH
+#  define BATTERY_TTE_PATH      BATTERY_SYSFS_PATH "/time_to_empty_now"
+# endif
 #endif
 
 /* Voltage is normally in microvolts */

@@ -46,6 +46,16 @@ static const char * const sysfs_bl_power =
     /* Framebuffer powers off both touch (if available) and screen */
     "/sys/class/graphics/fb0/blank";
 
+#elif defined(BACKLIGHT_LEDS_LCD)
+/* leds-class backlight (e.g. Innioasis Y1 — MTK MT6572 ships /sys/class/leds/
+ * lcd-backlight/{brightness,max_brightness}; no separate power node, so the
+ * framebuffer blank node is used to power-gate the panel. */
+static const char * const sysfs_bl_brightness =
+    "/sys/class/leds/lcd-backlight/brightness";
+
+static const char * const sysfs_bl_power =
+    "/sys/class/graphics/fb0/blank";
+
 #else
 static const char * const sysfs_bl_brightness =
     "/sys/class/backlight/pwm-backlight.0/brightness";
