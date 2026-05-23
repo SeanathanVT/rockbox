@@ -218,86 +218,141 @@ static int codec_write(uint32_t offset, uint32_t value, uint32_t mask)
     return rc;
 }
 
-static void eac_configure_afe_44k_stereo(void)
+/* Phase 1 of the captured stock session: 17 SET_AUDSYS_REG writes that
+ * configure the AFE digital path.  Verbatim from the 2026-05-23 trace at
+ * /work/logs/mediaserver-eac-args.log (boot-test/y1_alive::test_audio
+ * confirmed tone-audible with this exact sequence). */
+static void eac_afe_config_phase1(void)
 {
     if (afe_configured || eac_fd < 0)
         return;
 
-    /* Register values verified on-device via afe_dump idle/playing diff
-     * (boot-test/afe_dump.c).  See docs/audio-stack.md for the live-
-     * captured stock-playback values these mirror. */
-    afe_write(AFE_DAC_CON1, EAC_SR_IDX_44100, 0xf);
-    afe_write(AFE_IRQ_CON,  EAC_SR_IDX_44100 << 4, 0xf0);
-    afe_write(AFE_IRQ_CNT1, EAC_IRQ1_PERIOD_44100, 0xffffffff);
-    afe_write(AFE_IRQ_CON,  0x1, 0x1);
-
-    /* AFE_CONN routing matrix: AFE_CONN1 bit 21 + AFE_CONN2 bit 6 are the
-     * exact bits stock HAL sets for DL1 L/R -> DAC L/R on MT6572.  Not
-     * what naive interpretation of MTK docs suggests; verified by live
-     * dump during stock playback. */
-    afe_write(AFE_CONN1, 0x00200000, 0x00200000);
-    afe_write(AFE_CONN2, 0x00000040, 0x00000040);
-
-    /* I2S_CON1: stock value 0x0909 (bit 0 = OUT enable included). */
-    afe_write(AFE_I2S_CON1, 0x0909, 0xffff);
-
-    /* ADDA registers -- stock playback shows these are set even though
-     * subagent RE suggested kernel handles them via AUD_SET_ANA_CLOCK. */
-    afe_write(AFE_ADDA_DL_SRC2_CON0, 0x73001803, 0xffffffff);
-    afe_write(AFE_ADDA_UL_DL_CON0,   0x00000001, 0x00000001);
-
-    /* IRQ-MCU enable -- stock 0x639; required for AFE IRQ to reach
-     * AudDrv_write's wait_event wakeup. */
-    afe_write(AFE_IRQ_MCU_EN, 0x639, 0xffff);
-
-    /* MT6323 codec writes -- diff between stock idle/playing reveals these
-     * two move during playback.  Likely related to analog-path un-mute +
-     * gain/buffer config.  KNOWN INSUFFICIENT: smoke test runs cleanly
-     * with these values but produces no audible output, suggesting a
-     * temporal codec power-up sequence we haven't captured yet (charge-
-     * pump -> settle -> DAC -> settle -> un-mute).  Next step: strace
-     * mediaserver during stock playback start to capture write order. */
-    codec_write(0x108, 0x12bf, 0xffff);
-    codec_write(0x194, 0x0074, 0xffff);
+    afe_write(0x3a0, 0x00000090, 0x000000f0);   /* IRQ_CON: trigger mode */
+    afe_write(0x3ac, 0x00000800, 0xffffffff);   /* IRQ_CNT1: 2048-sample period */
+    afe_write(0x3a0, 0x00000001, 0x00000001);   /* IRQ_CON: IRQ1 enable */
+    afe_write(0x024, 0x00200000, 0x00200000);   /* CONN1: DL1 L route */
+    afe_write(0x028, 0x00000040, 0x00000040);   /* CONN2: DL1 R route */
+    afe_write(0x010, 0x00000400, 0x00000400);   /* DAC_CON0 step 1 (bit 10) */
+    afe_write(0x260, 0x00000000, 0xffffffff);   /* zero -- captured */
+    afe_write(0x264, 0x00000000, 0xffffffff);   /* zero -- captured */
+    afe_write(0x108, 0x73001803, 0xffffffff);   /* ADDA_DL_SRC2_CON0 config */
+    afe_write(0x10c, 0xf74f0000, 0xffffffff);   /* ADDA_DL_SRC2_CON1 config */
+    afe_write(0x034, 0x00000908, 0x0000ffff);   /* I2S_CON1 config (no enable) */
+    afe_write(0x108, 0x00000001, 0x00000001);   /* ADDA_DL_SRC2_CON0 enable */
+    afe_write(0x034, 0x00000001, 0x00000001);   /* I2S_CON1 OUT enable */
+    afe_write(0x108, 0x00000001, 0x00000001);   /* stock writes it twice */
+    afe_write(0x124, 0x00000001, 0x00000001);   /* ADDA_UL_DL_CON0 */
+    afe_write(0x4c4, 0x00000000, 0x00000010);   /* clear bit 4 (purpose unknown) */
+    afe_write(0x010, 0x00000001, 0x00000001);   /* DAC_CON0 step 2: AFE enable */
 
     afe_configured = true;
+}
+
+/* Phase 3: 12 immediate + 2 spaced MT6323 codec writes that ramp the
+ * analog path from idle to mid-volume.  Final 2 (volume ramp on 0x70a)
+ * deferred to eac_codec_volume_ramp() after amp enable. */
+static void eac_codec_ramp_phase3(void)
+{
+    codec_write(0x10c,  0x00000100, 0xffff0100);
+    codec_write(0x4024, 0x00007330, 0xffffffff);
+    codec_write(0x4002, 0x00000009, 0xffff000f);
+    codec_write(0x4006, 0x00000304, 0xffffffff);
+    codec_write(0x4008, 0x00000292, 0xffffffff);
+    codec_write(0x4014, 0x00000001, 0xffff0001);
+    codec_write(0x4016, 0x00000300, 0xffff0300);
+    codec_write(0x4000, 0x00000001, 0xffff0001);
+    codec_write(0x70c,  0x0000f7f2, 0xffffffff);
+    codec_write(0x700,  0x00007000, 0xfffff000);
+    codec_write(0x70a,  0x00000014, 0xffffffff);
+    codec_write(0x708,  0x0000007c, 0xffffffff);
+    /* Stock pauses ~16.5 ms here while DMA continues; the kernel ring
+     * buffer absorbs it without a userspace sleep on our side. */
+    codec_write(0x70c,  0x0000f5ba, 0xffffffff);
+    codec_write(0x70a,  0x00002214, 0xffffffff);
+}
+
+/* Phase 5: 2-step volume ramp on ANA 0x70a, fires ~215 ms after the amp
+ * routes are enabled. */
+static void eac_codec_volume_ramp(void)
+{
+    codec_write(0x70a, 0x00003000, 0xffff7000);
+    codec_write(0x70a, 0x00000300, 0xffff0700);
+}
+
+/* Phase 6: SR + DAC enable bit -- the last two AFE writes in the stock
+ * session.  Setting SR before this point breaks the bring-up. */
+static void eac_afe_final_phase6(void)
+{
+    afe_write(0x014, EAC_SR_IDX_44100, 0xf);     /* DAC_CON1: SR = 44.1k */
+    afe_write(0x010, 0x00000002, 0x00000002);    /* DAC_CON0: DL DAC enable */
 }
 
 static void eac_deconfigure_afe(void)
 {
     if (!afe_configured || eac_fd < 0)
         return;
-    /* Tear down in reverse — disable I2S OUT, disable IRQ1. Leave route
-     * matrix; kernel zeros on next AUD_RESTART. */
-    afe_write(AFE_I2S_CON1, 0x0, 0x1);
-    afe_write(AFE_IRQ_CON,  0x0, 0x1);
+    /* Drop the DL DAC + AFE enable bits first, then I2S OUT and IRQ1.
+     * Kernel zeros the rest of AFE_DAC_CON0/CON1/IRQ_CON on the next
+     * AUD_RESTART so we don't need to clear every config bit. */
+    afe_write(0x010, 0x00000000, 0x00000003);
+    afe_write(0x034, 0x00000000, 0x00000001);
+    afe_write(0x3a0, 0x00000000, 0x00000001);
     afe_configured = false;
 }
 
+/* DL1 fetch bit (AFE_DAC_CON0 bit 1) toggle for pause/resume.  All other
+ * DAC_CON0 bits stay set across a pause so the codec doesn't lose its
+ * power-up state. */
 static void eac_dl1_enable(bool on)
 {
     if (eac_fd < 0 || on == dl1_running)
         return;
-    /* AFE_DAC_CON0 stock-live value during playback is 0x3403:
-     *   bit 0  = DAC engine enable (kernel-managed via AUD_SET_ANA_CLOCK)
-     *   bit 1  = DL1 memif fetch enable
-     *   bits 10/12/13 = output routing (0x3400)
-     * Write the routing bits + DL1 enable; bit 0 stays kernel-controlled. */
-    afe_write(AFE_DAC_CON0, on ? 0x3402 : 0x0, 0x3402);
+    afe_write(0x010, on ? 0x00000002 : 0x00000000, 0x00000002);
     dl1_running = on;
+}
+
+/* Push a zero-filled chunk into the DL1 ring so the kernel DMA engine
+ * has data to fetch the instant the codec un-mutes.  Stock HAL does this
+ * implicitly via its first AudioFlinger buffer copy ~43 ms after
+ * START_MEMIF; we do it explicitly here.  One IRQ1-period worth of
+ * silence (2048 stereo samples) is enough to bridge to the worker. */
+static void eac_prime_dma(void)
+{
+    static const uint8_t silence[2048 * 4] = { 0 };
+    ssize_t n = write(eac_fd, silence, sizeof silence);
+    if (n != (ssize_t)sizeof silence)
+        logf("eac prime_dma short write n=%zd: %s", n, strerror(errno));
 }
 
 static void stream_start(void)
 {
     if (stream_running || eac_fd < 0)
         return;
+
+    /* Cold init (idempotent). */
     eac_alloc_dl1();
     eac_clocks_hold(true);
-    eac_configure_afe_44k_stereo();
-    eac_route_analog(true);
+
+    /* Mirror the captured stock session-start order verbatim.  The
+     * smoke test in boot-test/y1_alive.c::test_audio uses the same
+     * sequence and confirmed tone-audible 2026-05-23. */
+    eac_afe_config_phase1();
+
     if (ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1) < 0)
         logf("eac START_MEMIF: %s", strerror(errno));
-    eac_dl1_enable(true);
+    eac_prime_dma();
+
+    eac_codec_ramp_phase3();
+    eac_route_analog(true);            /* Phase 4: amps LAST */
+
+    /* Stock waits ~215 ms here while data flows before the volume
+     * ramp; on our side DMA is being fed by the worker by the time we
+     * get here, so a short usleep is sufficient. */
+    usleep(215000);
+    eac_codec_volume_ramp();
+
+    eac_afe_final_phase6();
+    dl1_running    = true;
     stream_running = true;
 }
 
@@ -310,7 +365,7 @@ static void stream_stop(bool teardown)
     stream_running = false;
     if (!teardown)
         return;
-    /* Full close — drop AFE config, route, clocks, alloc. */
+    /* Full close -- drop AFE config, route, clocks, alloc. */
     eac_deconfigure_afe();
     eac_route_analog(false);
     eac_clocks_hold(false);
