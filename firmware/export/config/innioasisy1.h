@@ -45,13 +45,16 @@
 #define CONFIG_BACKLIGHT_FADING    BACKLIGHT_FADING_SW_SETTING
 #define BACKLIGHT_LEDS_LCD
 
-/* Buttons: 5 capacitive nav buttons via mtk-tpd; power via mtk-kpd */
+/* Buttons: iPod-style click wheel (5 cardinals + capacitive scroll ring).
+ * Cardinals + wheel ticks come from mtk-tpd (event2); the center SELECT key
+ * comes from mtk-kpd (event0); headset PLAY/NEXT/PREV come from ACCDET
+ * (event1). See firmware/target/hosted/innioasis/button-target.h for the
+ * physical-to-keycode map. */
 #define CONFIG_KEYPAD              INNIOASIS_Y1_PAD
 #define HAVE_HEADPHONE_DETECTION
 
-/* Capacitive nav row is not a wheel; declare NO_BUTTON_LR so list/wps navigation
- * uses PREV/NEXT instead of LEFT/RIGHT semantics. */
-#define NO_BUTTON_LR
+#define HAVE_SCROLLWHEEL
+#define WHEELCLICKS_PER_ROTATION   24
 
 /* CPU: 1.3 GHz Cortex-A7 (per /sys cpufreq scaling_max_freq, verify on-device) */
 #define CPU_FREQ 1300000000

@@ -104,7 +104,8 @@
 
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 
 #define QUIT BUTTON_MENU
 #define LEFT BUTTON_LEFT
@@ -367,9 +368,10 @@ CONFIG_KEYPAD == MROBE500_PAD
 #define MAX_LIVES 8
 
 
-/* m:robe 500 defines */
+/* m:robe 500 defines (+ Innioasis Y1 480x360 piggyback) */
 #if ((LCD_WIDTH == 640) && (LCD_HEIGHT == 480)) || \
-    ((LCD_WIDTH == 480) && (LCD_HEIGHT >= 640))
+    ((LCD_WIDTH == 480) && (LCD_HEIGHT >= 640)) || \
+    ((LCD_WIDTH == 480) && (LCD_HEIGHT == 360))
 
 /* Original arcade game size 224x240, 1bpp with
  * red overlay at top and green overlay at bottom.

@@ -61,7 +61,8 @@
 
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 #define QUIT BUTTON_MENU
 #define LEFT BUTTON_LEFT
 #define RIGHT BUTTON_RIGHT
@@ -1501,6 +1502,7 @@ static int brickmania_help(void)
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
       (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD) || \
       (CONFIG_KEYPAD == SANSA_FUZE_PAD)
         "MENU:",
 #elif (CONFIG_KEYPAD == IRIVER_H100_PAD) || \

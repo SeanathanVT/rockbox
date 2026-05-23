@@ -38,7 +38,8 @@
 
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 
 #define FLIPIT_SCROLLWHEEL
 #define FLIPIT_LEFT         BUTTON_LEFT
@@ -863,7 +864,8 @@ enum plugin_status plugin_start(const void* parameter)
     rb->lcd_putsxy(2, 48, "[REC] step by step");
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
     rb->lcd_putsxy(2, 8, "Long [SELECT] to stop");
     rb->lcd_putsxy(2, 18, "[SELECT] toggle");
     rb->lcd_putsxy(2, 28, "[S-LEFT] shuffle");

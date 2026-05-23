@@ -62,7 +62,8 @@ struct battery_tables_t {
 
 #elif (CONFIG_KEYPAD == IPOD_4G_PAD) || \
       (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-      (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+      (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+      (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 
 #define BATTERY_ON  BUTTON_PLAY
 #define BATTERY_OFF BUTTON_MENU

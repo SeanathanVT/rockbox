@@ -122,7 +122,8 @@ const struct button_mapping pla_main_ctx[] =
      * buttons */
 #elif (CONFIG_KEYPAD == IPOD_1G2G_PAD) \
     || (CONFIG_KEYPAD == IPOD_3G_PAD) \
-    || (CONFIG_KEYPAD == IPOD_4G_PAD)
+    || (CONFIG_KEYPAD == IPOD_4G_PAD) \
+    || (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
     { PLA_UP,               BUTTON_MENU,                        BUTTON_NONE },
     { PLA_DOWN,             BUTTON_PLAY,                        BUTTON_NONE },
     { PLA_LEFT,             BUTTON_LEFT,                        BUTTON_NONE },
@@ -322,7 +323,8 @@ const struct button_mapping pla_main_ctx[] =
     {PLA_SELECT_REPEAT,     BUTTON_RC_ON|BUTTON_REPEAT,         BUTTON_NONE },
 #elif (CONFIG_KEYPAD == IPOD_1G2G_PAD) \
    || (CONFIG_KEYPAD == IPOD_3G_PAD) \
-   || (CONFIG_KEYPAD == IPOD_4G_PAD)
+   || (CONFIG_KEYPAD == IPOD_4G_PAD) \
+   || (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
     {PLA_CANCEL,            BUTTON_MENU|BUTTON_SELECT,          BUTTON_NONE },
     {PLA_EXIT,              BUTTON_PLAY|BUTTON_SELECT,          BUTTON_NONE },
     {PLA_SELECT,            BUTTON_SELECT,                      BUTTON_NONE },

@@ -4264,7 +4264,7 @@ fi
     tool="cp "
     boottool="cp "
     bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"
-    bmp2rb_native="$rootdir/tools/bmp2rb -f 4"
+    bmp2rb_native="$rootdir/tools/bmp2rb -f 10"   # LCD_DEPTH=32 → 32-bit XRGB
     output="rockbox.y1"
     bootoutput="bootloader.y1"
     appextra="recorder:gui:hosted"

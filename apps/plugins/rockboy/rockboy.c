@@ -112,7 +112,7 @@ static void setoptions (void)
         options.SELECT  = BUTTON_SELECT;
         options.MENU    = BUTTON_OFF;
 
-#elif CONFIG_KEYPAD == IPOD_4G_PAD
+#elif CONFIG_KEYPAD == IPOD_4G_PAD || CONFIG_KEYPAD == INNIOASIS_Y1_PAD
         options.UP      = BUTTON_MENU;
         options.DOWN    = BUTTON_PLAY;
 

@@ -31,7 +31,9 @@
 
 #if (CONFIG_KEYPAD == IPOD_4G_PAD) ||           \
     (CONFIG_KEYPAD == IPOD_3G_PAD) ||           \
-    (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+    (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+    (CONFIG_KEYPAD == INNIOASIS_Y1_PAD) || \
+    (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 
 #define ROCKBLOX_OFF           (BUTTON_SELECT | BUTTON_REPEAT)
 #define ROCKBLOX_ROTATE_CCW    BUTTON_SCROLL_BACK
@@ -563,6 +565,19 @@
 #define SCORE_Y 58
 #define LEVEL_Y 142
 #define LINES_Y 218
+
+#elif (LCD_WIDTH == 480) && (LCD_HEIGHT == 360)
+
+#define BLOCK_WIDTH 17
+#define BLOCK_HEIGHT 17
+#define BOARD_X 32
+#define BOARD_Y 10
+#define PREVIEW_X 228
+#define PREVIEW_Y 18
+#define LABEL_X 232
+#define SCORE_Y 110
+#define LEVEL_Y 170
+#define LINES_Y 230
 
 #elif (LCD_WIDTH == 360) && (LCD_HEIGHT == 400)
 

@@ -157,7 +157,8 @@ void I_ShutdownGraphics(void)
 //
 
 #if (CONFIG_KEYPAD == IPOD_4G_PAD) || (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-    (CONFIG_KEYPAD == IPOD_1G2G_PAD)
+    (CONFIG_KEYPAD == IPOD_1G2G_PAD) || \
+    (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
 #define DOOMBUTTON_SCROLLWHEEL
 #define DOOMBUTTON_SCROLLWHEEL_CC     BUTTON_SCROLL_BACK
 #define DOOMBUTTON_SCROLLWHEEL_CW    BUTTON_SCROLL_FWD
@@ -723,7 +724,8 @@ static inline void getkey()
          hswitch=0;
       }
 #if (CONFIG_KEYPAD == IPOD_4G_PAD) || (CONFIG_KEYPAD == IPOD_3G_PAD) || \
-    (CONFIG_KEYPAD == IPOD_1G2G_PAD) || (CONFIG_KEYPAD == SAMSUNG_YH92X_PAD)
+    (CONFIG_KEYPAD == IPOD_1G2G_PAD) || (CONFIG_KEYPAD == SAMSUNG_YH92X_PAD) || \
+    (CONFIG_KEYPAD == INNIOASIS_Y1_PAD)
       /* Bring up the menu */
       event.data1=KEY_ESCAPE;
 #else
