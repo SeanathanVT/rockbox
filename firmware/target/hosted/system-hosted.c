@@ -80,7 +80,7 @@ static void *y1_watchdog(void *arg)
         while ((e = readdir(d)) != NULL)
         {
             if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
-            char p[80];
+            char p[sizeof("/proc/self/task//syscall") + sizeof e->d_name];
             write(STDERR_FILENO, "  tid ", 6);
             write(STDERR_FILENO, e->d_name, strlen(e->d_name));
             write(STDERR_FILENO, " comm=", 6);
