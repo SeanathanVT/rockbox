@@ -376,7 +376,11 @@ static const char graphic_numeric[] = "graphic,numeric";
 #endif
 
 #ifdef HAVE_LCD_COLOR
-  #if DEFAULT_FONT_HEIGHT >= 31 || defined(SHANLING_Q1)
+  #if DEFAULT_FONT_HEIGHT >= 31 || defined(SHANLING_Q1) || defined(INNIOASIS_Y1)
+    /* INNIOASIS_Y1: font height 27 would pick 24x24, but the build only ships
+     * the 32x32 tango set (what cabbiev2 references at 480x360 in WPSLIST), so
+     * the 24x24 default resolves to a missing file and falls back to the tiny
+     * built-in iconset. Pin the default to the size we actually package. */
     #define DEFAULT_ICONSET "tango_icons.32x32"
     #define DEFAULT_VIEWERS_ICONSET "tango_icons_viewers.32x32"
   #elif DEFAULT_FONT_HEIGHT >= 23
