@@ -35,12 +35,67 @@
 #include "filesystem-hosted.h"
 #include "logf.h"
 
+#if defined(DEBUG) && defined(INNIOASIS_Y1)
+#include <stdio.h>
+#include <pthread.h>
+#include <dirent.h>
+#include <fcntl.h>
+#endif
+
 /* to make thread-internal.h happy */
 uintptr_t *stackbegin;
 uintptr_t *stackend;
 
 /* forward-declare */
 bool os_file_exists(const char *ospath);
+
+#if defined(DEBUG) && defined(INNIOASIS_Y1)
+/* Hang watchdog (DEBUG only).  A crash raises a signal the handler can dump,
+ * but a *hang* raises nothing -- so this real OS thread, independent of
+ * Rockbox's cooperative scheduler, periodically dumps every thread's kernel
+ * state to stderr (-> rockbox.err).  /proc/self/task/<tid>/{comm,wchan,syscall}
+ * names what each thread is blocked in; the last dump before the log stops
+ * points at the stuck thread (a futex/lock, a read/write, or a busy spin). */
+static void wd_emit(const char *path)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) { write(STDERR_FILENO, "?", 1); return; }
+    char buf[192];
+    ssize_t n = read(fd, buf, sizeof buf);
+    close(fd);
+    while (n > 0 && (buf[n-1] == '\n' || buf[n-1] == ' ')) n--;
+    if (n > 0) write(STDERR_FILENO, buf, (size_t)n);
+}
+
+static void *y1_watchdog(void *arg)
+{
+    (void)arg;
+    for (;;)
+    {
+        sleep(4);
+        DIR *d = opendir("/proc/self/task");
+        if (!d) continue;
+        write(STDERR_FILENO, "--- watchdog ---\n", 17);
+        struct dirent *e;
+        while ((e = readdir(d)) != NULL)
+        {
+            if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+            char p[80];
+            write(STDERR_FILENO, "  tid ", 6);
+            write(STDERR_FILENO, e->d_name, strlen(e->d_name));
+            write(STDERR_FILENO, " comm=", 6);
+            snprintf(p, sizeof p, "/proc/self/task/%s/comm", e->d_name);    wd_emit(p);
+            write(STDERR_FILENO, " wchan=", 7);
+            snprintf(p, sizeof p, "/proc/self/task/%s/wchan", e->d_name);   wd_emit(p);
+            write(STDERR_FILENO, " syscall=", 9);
+            snprintf(p, sizeof p, "/proc/self/task/%s/syscall", e->d_name); wd_emit(p);
+            write(STDERR_FILENO, "\n", 1);
+        }
+        closedir(d);
+    }
+    return NULL;
+}
+#endif
 
 static void sig_handler(int sig, siginfo_t *siginfo, void *context)
 {
@@ -125,6 +180,11 @@ void system_init(void)
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGBUS, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+
+#if defined(DEBUG) && defined(INNIOASIS_Y1)
+    pthread_t wd;
+    pthread_create(&wd, NULL, y1_watchdog, NULL);
+#endif
 }
 
 void system_reboot(void)
