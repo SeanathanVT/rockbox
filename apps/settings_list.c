@@ -352,6 +352,11 @@ static const char graphic_numeric[] = "graphic,numeric";
 #elif defined(SHANLING_Q1)
   /* 16pt font looks pretty aliased & ugly */
   #define DEFAULT_FONT_HEIGHT 18
+#elif defined(INNIOASIS_Y1)
+  /* 480x360 on a physically tiny, very high-DPI panel: the generic
+     LCD_HEIGHT<=400 default of 16 is unreadable, and drives 16x16 icons.
+     Use 27 to match the pixel density (-> 24x24 icons). */
+  #define DEFAULT_FONT_HEIGHT 27
 #elif LCD_HEIGHT <= 400
   #define DEFAULT_FONT_HEIGHT 16
 #elif LCD_HEIGHT <= 480 && LCD_WIDTH < 800
