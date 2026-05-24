@@ -44,6 +44,11 @@
  * path" for the full follow-up plan.
  */
 
+/* Route this file's logf() to DEBUGF/stderr (rockbox.err) in a -DDEBUG
+ * build.  Without LOGF_ENABLE, logf.h forces logf() to a no-op even in a
+ * debug build (firmware/export/logf.h). */
+#define LOGF_ENABLE
+
 #include "config.h"
 #include "audio.h"
 #include "audiohw.h"
@@ -367,9 +372,11 @@ static void eac_dl1_enable(bool on)
 static void eac_prime_dma(void)
 {
     static const uint8_t silence[2048 * 4] = { 0 };
+    logf("Y1PCM prime_dma: write %u (blocking)", (unsigned)sizeof silence);
     ssize_t n = write(eac_fd, silence, sizeof silence);
     if (n != (ssize_t)sizeof silence)
         logf("eac prime_dma short write n=%zd: %s", n, strerror(errno));
+    logf("Y1PCM prime_dma: returned n=%zd", n);
 }
 
 static void stream_start(void)
@@ -377,29 +384,37 @@ static void stream_start(void)
     if (stream_running || eac_fd < 0)
         return;
 
+    logf("Y1PCM stream_start: enter");
     /* Cold init (idempotent). */
     eac_alloc_dl1();
     eac_clocks_hold(true);
+    logf("Y1PCM stream_start: alloc+clocks ok");
 
     /* Mirror the captured stock session-start order verbatim.  The
      * smoke test in boot-test/y1_alive.c::test_audio uses the same
      * sequence and confirmed tone-audible 2026-05-23. */
     eac_afe_config_phase1();
+    logf("Y1PCM stream_start: afe phase1 ok");
 
     if (ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1) < 0)
         logf("eac START_MEMIF: %s", strerror(errno));
+    logf("Y1PCM stream_start: START_MEMIF ok");
     eac_prime_dma();
 
     eac_codec_ramp_phase3();
+    logf("Y1PCM stream_start: codec ramp ok");
     eac_route_analog(true);            /* Phase 4: amps LAST */
+    logf("Y1PCM stream_start: route ok");
 
     /* Stock waits ~215 ms here while data flows before the volume
      * ramp; on our side DMA is being fed by the worker by the time we
      * get here, so a short usleep is sufficient. */
     usleep(215000);
     eac_codec_volume_ramp();
+    logf("Y1PCM stream_start: vol ramp ok");
 
     eac_afe_final_phase6();
+    logf("Y1PCM stream_start: phase6 ok (running)");
     dl1_running    = true;
     stream_running = true;
 }
@@ -437,6 +452,7 @@ static void stream_stop(bool teardown)
 static void *worker_main(void *arg)
 {
     (void)arg;
+    bool logged_first = false;   /* one-shot breadcrumb; -o sync per chunk would stall */
 
     while (!worker_quit)
     {
@@ -460,7 +476,13 @@ static void *worker_main(void *arg)
             while (worker_paused && !worker_quit)
                 usleep(2000);
 
+            if (!logged_first)
+                logf("Y1PCM worker: first write size=%zu (blocking)", size);
             ssize_t n = write(eac_fd, addr, size);
+            if (!logged_first) {
+                logf("Y1PCM worker: first write ret=%zd", n);
+                logged_first = true;
+            }
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
@@ -498,6 +520,7 @@ void audiohw_preinit(void)
     if (eac_fd >= 0)
         return;
 
+    logf("Y1PCM preinit: open /dev/eac");
     eac_fd = open("/dev/eac", O_RDWR);
     if (eac_fd < 0) {
         logf("open /dev/eac: %s", strerror(errno));
@@ -507,7 +530,9 @@ void audiohw_preinit(void)
     /* AUD_RESTART is the HAL's hardware-init handshake — a kitchen-sink
      * clock+AFE reset that zeros AFE_DAC_CON0/CON1/IRQ_CON. The driver
      * relies on this clean slate and reprograms everything in stream_start. */
+    logf("Y1PCM preinit: AUD_RESTART");
     ioctl(eac_fd, AUD_RESTART, 0);
+    logf("Y1PCM preinit: done");
 }
 
 void audiohw_postinit(void)
@@ -590,6 +615,7 @@ static void sink_dma_start(const void *addr, size_t size)
     if (eac_fd < 0 || !addr || !size)
         return;
 
+    logf("Y1PCM sink_dma_start: size=%zu", size);
     stream_start();
 
     pthread_mutex_lock(&worker_mtx);
