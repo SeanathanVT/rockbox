@@ -87,10 +87,11 @@
 %?Rm<%xd(ca)|%xd(cb)>
 
 # Clock on RTC able targets, and disk access.
-# INNIOASIS_Y1: draw the clock in the UI font (id 1) instead of the ~8px
-# sysfont, which is unreadable on this 480x360 high-DPI panel. Right-aligned
-# in a wider/full-height viewport to fit the larger glyphs.
-%V(-100,0,76,24,1)
+# INNIOASIS_Y1: the ~8px sysfont clock is unreadable on this high-DPI panel;
+# draw it in 16px Terminus-Bold (matches the theme typeface and the 16px
+# status-icon size). Right-aligned, vertically centred to sit with the icons.
+%Fl(2,16-Terminus-Bold.fnt)
+%V(-90,4,64,16,2)
 %ar%?cc<%?ca<%?St(time format)<%cH|%cI>:%cM|--:-->|>
 
 # disk access icon
