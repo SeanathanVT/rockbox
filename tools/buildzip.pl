@@ -660,7 +660,13 @@ sub buildzip {
     # until buildwps.pl is fixed, manually copy the classic_statusbar theme across
     mkdir "$temp_dir/wps/classic_statusbar", 0777;
     glob_copy("$ROOT/wps/classic_statusbar/*.bmp", "$temp_dir/wps/classic_statusbar");
-    if ($depth >= 16 && $height > 480) {
+    # INNIOASIS_Y1 (480x360, 32bpp): a wide-but-short colour panel the height>480
+    # test misses. Ship a Y1 classic_statusbar variant -- the stock 24px layout
+    # and icons, but with the clock in the UI font (the ~8px sysfont clock is
+    # unreadable on this high-DPI panel).
+    if ($modelname =~ /innioasisy1/) {
+        copy("$ROOT/wps/classic_statusbar.480x360x16.sbs", "$temp_dir/wps/classic_statusbar.sbs");
+    } elsif ($depth >= 16 && $height > 480) {
         copy("$ROOT/wps/classic_statusbar.24.sbs", "$temp_dir/wps/classic_statusbar.sbs");
     } elsif ($depth == 16) {
         copy("$ROOT/wps/classic_statusbar.sbs", "$temp_dir/wps");

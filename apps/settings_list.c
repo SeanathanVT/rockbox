@@ -330,7 +330,14 @@ static const char graphic_numeric[] = "graphic,numeric";
 
 /* Default theme settings */
 #define DEFAULT_WPSNAME  "cabbiev2"
+#if defined(INNIOASIS_Y1)
+/* Default to the stock classic_statusbar skin: the built-in statusbar is
+ * sysfont-sized and unreadable on this 480x360 high-DPI panel. buildzip ships
+ * the 24px (.16-icon) classic_statusbar variant for the Y1. */
+#define DEFAULT_SBSNAME  "classic_statusbar"
+#else
 #define DEFAULT_SBSNAME  "-"
+#endif
 #define DEFAULT_FMS_NAME "cabbiev2"
 
 #if LCD_HEIGHT <= 64
