@@ -117,16 +117,27 @@
 #define RECPRESETS_DIR      ROCKBOX_DIR "/recpresets"
 #define FMPRESET_PATH       ROCKBOX_DIR "/fmpresets"
 
-#define DIRCACHE_FILE       ROCKBOX_DIR "/dircache.dat"
+/* Writable runtime data dir.  Defaults to the (possibly read-only / baked)
+ * install dir, but a target may point it at writable, persistent storage.
+ * The Innioasis Y1 bakes its .rockbox into a flash partition mounted by the
+ * boot init, so its writable files must live on the internal SD instead --
+ * a path under MULTIDRIVE_DIR is taken as-is (no PIVOT_ROOT prefix). */
+#if defined(INNIOASIS_Y1)
+#define RB_WRITABLE_DIR     MULTIDRIVE_DIR "/.rockbox"
+#else
+#define RB_WRITABLE_DIR     ROCKBOX_DIR
+#endif
+
+#define DIRCACHE_FILE       RB_WRITABLE_DIR "/dircache.dat"
 #define CODEPAGE_DIR        ROCKBOX_DIR "/codepages"
 
 #define VIEWERS_CONFIG      ROCKBOX_DIR "/viewers.config"
 
-#define RESUMEFILE          ROCKBOX_DIR "/.resume.cfg"
-#define CONFIGFILE          ROCKBOX_DIR "/config.cfg"
+#define RESUMEFILE          RB_WRITABLE_DIR "/.resume.cfg"
+#define CONFIGFILE          RB_WRITABLE_DIR "/config.cfg"
 #define FIXEDSETTINGSFILE   ROCKBOX_DIR "/fixed.cfg"
 
-#define PLAYLIST_CONTROL_FILE   ROCKBOX_DIR "/.playlist_control"
-#define GLYPH_CACHE_FILE        ROCKBOX_DIR "/.glyphcache"
+#define PLAYLIST_CONTROL_FILE   RB_WRITABLE_DIR "/.playlist_control"
+#define GLYPH_CACHE_FILE        RB_WRITABLE_DIR "/.glyphcache"
 
 #endif /* __PATHS_H__ */
