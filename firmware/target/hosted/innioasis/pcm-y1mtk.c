@@ -60,6 +60,7 @@
 #include "pcm-internal.h"
 #include "pcm_sampr.h"
 #include "pcm_sink.h"
+#include "pcm_sw_volume.h"
 #include "system.h"
 #include "kernel.h"
 #include "panic.h"
@@ -628,12 +629,16 @@ void audiohw_set_frequency(int fsel)
 
 void audiohw_set_volume(int vol_l, int vol_r)
 {
-    /* HW volume = MT6323 codec writes via SET_ANAAFE_REG (0xc0044302).
-     * Register set is not in the BSP source; needs a one-time on-device
-     * dump under a volume-slider drag. Software volume only for now
-     * (HAVE_SW_VOLUME_CONTROL in innioasisy1.h). */
-    (void)vol_l;
-    (void)vol_r;
+    /* No usable HW volume: the MT6323 gain registers (SET_ANAAFE_REG
+     * 0xc0044302) aren't in the BSP source, so attenuation is done in software
+     * (HAVE_SW_VOLUME_CONTROL).  This MUST forward the per-channel centibel
+     * level to the PCM SW scaler -- without it the scaler's factor stays 0 and
+     * ALL output is silenced (the "playhead moves but no audio" fault).
+     * Mirrors firmware/drivers/audio/dummy_codec.c.  The VOLUME setting floor
+     * (-73 dB -> -730 cb, y1mtk_codec.h) maps to a true digital mute. */
+    enum { Y1_MUTE_CB = -730 };   /* keep in sync with y1mtk_codec.h VOLUME min */
+    pcm_set_master_volume(vol_l <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : vol_l,
+                          vol_r <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : vol_r);
 }
 
 void audiohw_mute(int mute)
