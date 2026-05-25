@@ -502,6 +502,12 @@ static void *worker_main(void *arg)
         size_t      next_size = 0;
         bool more = pcm_play_dma_complete_callback(final_status,
                                                    &next_addr, &next_size);
+        { static int dbg_i = 0;
+          if (dbg_i < 8) {
+              logf("Y1PCM worker get-more #%d: more=%d next=%zu",
+                   dbg_i, (int)more, next_size);
+              dbg_i++;
+          } }
         pthread_mutex_lock(&worker_mtx);
         if (more && next_addr && next_size) {
             cur_addr   = next_addr;
