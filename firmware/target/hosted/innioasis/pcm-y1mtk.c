@@ -155,6 +155,11 @@ static size_t      cur_size = 0;
 static volatile bool worker_run    = false;
 static volatile bool worker_quit   = false;
 static volatile bool worker_paused = false;
+/* Cleared on each fresh session start (sink_dma_start).  mixer_start_pcm()
+ * primes two frames of look-ahead before handing us the first buffer, so the
+ * first get-more already has mixed data -- skip the mix-ahead status callback
+ * exactly once after a (re)start to stay in phase with the double buffer. */
+static bool mixer_primed = false;
 
 /* -------------------------------------------------------------------------- */
 /* AFE register writes via SET_AUDSYS_REG.                                    */
@@ -522,14 +527,27 @@ static void *worker_main(void *arg)
 
         const void *next_addr = NULL;
         size_t      next_size = 0;
-        /* Hold the sink lock across get-more.  pcm_play_dma_complete_callback
-         * is the "bottom-layer ISR" path (pcm-internal.h) -- it runs the
+        /* Hold the sink lock across the mixer calls.  These run the
          * mixer/pcmbuf code that the cooperative threads also touch under
-         * pcm_play_lock (which maps to this same recursive worker_mtx).  Run
-         * from this raw pthread without the lock, it races them and can
-         * spuriously see "no more" -> pcm_play_stop_int() -> playback parks
-         * after one chunk (the 0:00 freeze). */
+         * pcm_play_lock (which maps to this same recursive worker_mtx); run
+         * from this raw pthread without the lock they race them. */
         pthread_mutex_lock(&worker_mtx);
+        /* Two-step handoff, mirroring the reference hosted driver (pcm-alsa.c):
+         *   1. status callback (PCM_DMAST_STARTED) -> mixer_buffer_callback,
+         *      which mixes the next frame and ADVANCES the playback channel
+         *      (this is what consumes pcmbuf, so it drives the playhead);
+         *   2. complete callback -> mixer_pcm_callback, which only hands back
+         *      the frame the status callback just prepared.
+         * Calling only (2) -- as this driver did -- replays the primed frame
+         * forever: silent output, no pcmbuf consumption, playhead stuck at
+         * 0:00.  Skip the mix-ahead once after a (re)start because
+         * mixer_start_pcm() already primed two frames of look-ahead. */
+        if (final_status >= PCM_DMAST_OK) {
+            if (mixer_primed)
+                pcm_play_dma_status_callback(PCM_DMAST_STARTED);
+            else
+                mixer_primed = true;
+        }
         bool more = pcm_play_dma_complete_callback(final_status,
                                                    &next_addr, &next_size);
         /* Heartbeat that trisects a sub-second freeze:
@@ -668,6 +686,7 @@ static void sink_dma_start(const void *addr, size_t size)
     cur_size      = size;
     worker_run    = true;
     worker_paused = false;
+    mixer_primed  = false;   /* re-prime in phase with mixer_start_pcm's look-ahead */
     pthread_cond_signal(&worker_cv);
     pthread_mutex_unlock(&worker_mtx);
 }
