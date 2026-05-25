@@ -849,6 +849,9 @@ static void pcmbuf_sampr_callback(uint32_t sampr)
 void pcmbuf_play_start(void)
 {
     logf("pcmbuf_play_start");
+    DEBUGF("Y1PB pcmbuf_play_start (status=%d widx!=ridx=%d)\n",
+           (int)mixer_channel_status(PCM_MIXER_CHAN_PLAYBACK),
+           (int)(chunk_widx != chunk_ridx));
 
     if (mixer_channel_status(PCM_MIXER_CHAN_PLAYBACK) == CHANNEL_STOPPED &&
         chunk_widx != chunk_ridx)
@@ -858,7 +861,9 @@ void pcmbuf_play_start(void)
             .get_more = pcmbuf_pcm_callback,
             .sampr_changed = pcmbuf_sampr_callback,
         };
+        DEBUGF("Y1PB mixer_channel_play_data: enter\n");
         mixer_channel_play_data(PCM_MIXER_CHAN_PLAYBACK, &cbs, NULL, 0);
+        DEBUGF("Y1PB mixer_channel_play_data: returned\n");
     }
 }
 

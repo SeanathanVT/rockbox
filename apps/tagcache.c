@@ -4983,11 +4983,14 @@ static bool check_dir(const char *dirname, int add_files)
             tc_stat.curentry = curpath;
 
             /* Add a new entry to the temporary db file. */
+            DEBUGF("Y1DB add: %s\n", curpath);
             add_tagcache(curpath, info.mtime);
+            DEBUGF("Y1DB added (syncscreen=%d)\n", (int)tc_stat.syncscreen);
 
             /* Wait until current path for debug screen is read and unset. */
             while (tc_stat.syncscreen && tc_stat.curentry != NULL)
                 yield();
+            DEBUGF("Y1DB screen-synced\n");
 
             tc_stat.curentry = NULL;
         }
