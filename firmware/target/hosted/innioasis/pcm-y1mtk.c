@@ -532,12 +532,18 @@ static void *worker_main(void *arg)
         pthread_mutex_lock(&worker_mtx);
         bool more = pcm_play_dma_complete_callback(final_status,
                                                    &next_addr, &next_size);
-        { static int dbg_i = 0;
-          if (dbg_i < 8) {
-              logf("Y1PCM worker get-more #%d: more=%d next=%zu",
+        /* Heartbeat that trisects a sub-second freeze:
+         *   - count climbs (#64,#128,..) -> worker is paced + playing, so a
+         *     no-audio/0:00 fault is in the analog codec path, not here;
+         *   - a "more=0" line -> pcmbuf drained / playback parked (refill side);
+         *   - frozen at #7 with no further line -> the write(2) above blocked
+         *     forever (DMA stopped draining -> ring full -> AFE/codec wedge).
+         * Logs the first 8, then every 64th, and always the park transition. */
+        { static unsigned dbg_i = 0;
+          if (dbg_i < 8 || (dbg_i & 63) == 0 || !more)
+              logf("Y1PCM worker get-more #%u: more=%d next=%zu",
                    dbg_i, (int)more, next_size);
-              dbg_i++;
-          } }
+          dbg_i++; }
         if (more && next_addr && next_size) {
             cur_addr   = next_addr;
             cur_size   = next_size;
