@@ -33,15 +33,18 @@
  *
  *   write(2) loop ...
  *
- * KNOWN-INSUFFICIENT (2026-05-23): the above sequence runs cleanly but
- * produces no audible output on hardware.  Steady-state register values match
- * stock playback byte-for-byte, but the codec analog stage doesn't pass the
- * signal through.  Suspected missing piece: a temporal codec power-up
- * sequence (charge-pump -> settle -> DAC -> settle -> un-mute) that the
- * steady-state dump can't reveal.  Next investigation: strace mediaserver
- * during stock playback start to capture the write order + intermediate
- * codec values.  See docs/audio-stack.md "Open items still on the audio
- * path" for the full follow-up plan.
+ * STATUS (2026-05-25): the full temporal session is now implemented --
+ * AFE config (eac_afe_config_phase1) -> START_MEMIF -> prime + continuous
+ * silence feed across the codec ramp/settle (eac_codec_ramp_phase3 + the feed
+ * loop in stream_start) -> amps on -> volume ramp -> SR + DAC enable
+ * (eac_afe_final_phase6), mirroring boot-test/y1_alive.c::test_audio, which is
+ * the only sequence confirmed tone-audible on hardware.  Two integration bugs
+ * that blocked this were fixed: a sink-lock self-deadlock in the mixer handoff
+ * (recursive worker_mtx) and a get-more race that parked playback after one
+ * chunk (hold the lock across pcm_play_dma_complete_callback).  Audible output
+ * on real hardware is pending validation of these fixes.  Open follow-ups:
+ * sample-rate switching (locked to 44.1k), jack-detect routing (both amps
+ * forced on for now), DMA position reporting.  See docs/audio-stack.md.
  */
 
 /* Route this file's logf() to DEBUGF/stderr (rockbox.err) in a -DDEBUG
