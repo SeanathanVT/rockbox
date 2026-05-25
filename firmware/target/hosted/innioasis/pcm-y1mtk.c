@@ -140,7 +140,11 @@ static bool dl1_running    = false;
 static bool stream_running = false;
 
 static pthread_t       worker_tid;
-static pthread_mutex_t worker_mtx = PTHREAD_MUTEX_INITIALIZER;
+/* Recursive: this lock backs the pcm_sink .lock/.unlock ops, and pcm_play_lock()
+ * (pcm.c) has no nesting counter -- the mixer holds it across mixer_start_pcm()
+ * while pcm_play_data() re-takes it, so a non-recursive mutex self-deadlocks
+ * before .play (sink_dma_start) is ever reached. */
+static pthread_mutex_t worker_mtx = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 static pthread_cond_t  worker_cv  = PTHREAD_COND_INITIALIZER;
 
 static const void *cur_addr = NULL;
