@@ -211,10 +211,14 @@ static void eac_route_analog(bool on)
      * the right amp based on the jack-detect sysfs.  button-y1.c's
      * headphones_inserted() reads /sys/class/switch/h2w/state. */
     if (on) {
-        bool hp = headphones_inserted();
-        if (ioctl(eac_fd, hp ? SET_SPEAKER_OFF   : SET_SPEAKER_ON,   hp ? 0 : 1) < 0)
+        /* Force BOTH amps on -- this matches boot-test/y1_alive.c, the only
+         * sequence confirmed to produce audible output.  Jack-detect routing
+         * (headphone XOR speaker via /sys/class/switch/h2w/state) is deferred
+         * until the analog path is confirmed working, so we don't mask a dead
+         * codec behind a wrong-route guess. */
+        if (ioctl(eac_fd, SET_SPEAKER_ON,   1) < 0)
             logf("eac spk: %s", strerror(errno));
-        if (ioctl(eac_fd, hp ? SET_HEADPHONE_ON  : SET_HEADPHONE_OFF, hp ? 1 : 0) < 0)
+        if (ioctl(eac_fd, SET_HEADPHONE_ON, 1) < 0)
             logf("eac hp: %s", strerror(errno));
     } else {
         if (ioctl(eac_fd, SET_SPEAKER_OFF,   0) < 0)
@@ -373,13 +377,22 @@ static void eac_dl1_enable(bool on)
  * implicitly via its first AudioFlinger buffer copy ~43 ms after
  * START_MEMIF; we do it explicitly here.  One IRQ1-period worth of
  * silence (2048 stereo samples) is enough to bridge to the worker. */
-static void eac_prime_dma(void)
+/* Write one IRQ1-period (2048 stereo frames, ~46 ms) of silence to the DL1
+ * ring, blocking until the DAC drains enough space.  Used both to prime and
+ * to keep the ring fed during the codec settle window. */
+static ssize_t eac_write_silence(void)
 {
     static const uint8_t silence[2048 * 4] = { 0 };
-    logf("Y1PCM prime_dma: write %u (blocking)", (unsigned)sizeof silence);
     ssize_t n = write(eac_fd, silence, sizeof silence);
     if (n != (ssize_t)sizeof silence)
-        logf("eac prime_dma short write n=%zd: %s", n, strerror(errno));
+        logf("eac silence short write n=%zd: %s", n, strerror(errno));
+    return n;
+}
+
+static void eac_prime_dma(void)
+{
+    logf("Y1PCM prime_dma: write 8192 (blocking)");
+    ssize_t n = eac_write_silence();
     logf("Y1PCM prime_dma: returned n=%zd", n);
 }
 
@@ -410,10 +423,16 @@ static void stream_start(void)
     eac_route_analog(true);            /* Phase 4: amps LAST */
     logf("Y1PCM stream_start: route ok");
 
-    /* Stock waits ~215 ms here while data flows before the volume
-     * ramp; on our side DMA is being fed by the worker by the time we
-     * get here, so a short usleep is sufficient. */
-    usleep(215000);
+    /* Keep the DMA fed with silence through the codec settle window rather
+     * than sleeping.  The analog power-up needs data clocking out of I2S
+     * continuously: the working smoke test (boot-test/y1_alive.c) interleaves
+     * writes here, whereas a single prime + usleep starves the ring and the
+     * codec never passes the signal.  Each blocking write paces against the
+     * DAC, so this also supplies the ~215 ms the ramp expects (5 x ~46 ms).
+     * The worker isn't feeding yet -- it's signaled only after stream_start
+     * returns. */
+    for (int i = 0; i < 5; i++)
+        eac_write_silence();
     eac_codec_volume_ramp();
     logf("Y1PCM stream_start: vol ramp ok");
 
@@ -500,6 +519,14 @@ static void *worker_main(void *arg)
 
         const void *next_addr = NULL;
         size_t      next_size = 0;
+        /* Hold the sink lock across get-more.  pcm_play_dma_complete_callback
+         * is the "bottom-layer ISR" path (pcm-internal.h) -- it runs the
+         * mixer/pcmbuf code that the cooperative threads also touch under
+         * pcm_play_lock (which maps to this same recursive worker_mtx).  Run
+         * from this raw pthread without the lock, it races them and can
+         * spuriously see "no more" -> pcm_play_stop_int() -> playback parks
+         * after one chunk (the 0:00 freeze). */
+        pthread_mutex_lock(&worker_mtx);
         bool more = pcm_play_dma_complete_callback(final_status,
                                                    &next_addr, &next_size);
         { static int dbg_i = 0;
@@ -508,7 +535,6 @@ static void *worker_main(void *arg)
                    dbg_i, (int)more, next_size);
               dbg_i++;
           } }
-        pthread_mutex_lock(&worker_mtx);
         if (more && next_addr && next_size) {
             cur_addr   = next_addr;
             cur_size   = next_size;
