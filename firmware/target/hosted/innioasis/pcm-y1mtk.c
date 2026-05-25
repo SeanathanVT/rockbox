@@ -220,43 +220,44 @@ static void eac_clocks_hold(bool on)
     clocks_held = on;
 }
 
+/* Output routing.  The kernel accdet does NOT auto-mute the inactive route
+ * (validated 2026-05-23: enabling both amps plays out of both at once), so
+ * exactly one amp is energised.  The headphone-vs-speaker choice is owned by
+ * Rockbox's HAVE_SPEAKER framework: audio_enable_speaker() resolves the
+ * "Speaker" setting (Off/On/Auto) against the jack state and calls
+ * audiohw_enable_speaker(), which records want_speaker here.  button.c polls
+ * headphones_inserted() and posts SYS_PHONE_{UN,}PLUGGED, so hot-plug while
+ * playing re-routes automatically. */
+static bool want_speaker = false;
+
+/* Apply want_speaker to the amps.  No-op unless a stream is live -- the amps
+ * are powered only between eac_route_analog(true) and (false) so a stopped
+ * player doesn't hiss or pop. */
+static void eac_apply_route(void)
+{
+    if (eac_fd < 0 || !route_active)
+        return;
+    if (want_speaker) {
+        ioctl(eac_fd, SET_HEADPHONE_OFF, 0);
+        ioctl(eac_fd, SET_SPEAKER_ON,    1);
+    } else {
+        ioctl(eac_fd, SET_SPEAKER_OFF,   0);
+        ioctl(eac_fd, SET_HEADPHONE_ON,  1);
+    }
+}
+
 static void eac_route_analog(bool on)
 {
     if (eac_fd < 0 || on == route_active)
         return;
-    /* Kernel accdet does NOT auto-mute the inactive route: validated on
-     * 2026-05-23 -- enabling both SET_SPEAKER_ON and SET_HEADPHONE_ON
-     * makes the tone play out of both at once.  Userspace has to pick
-     * the right amp based on the jack-detect sysfs.  button-y1.c's
-     * headphones_inserted() reads /sys/class/switch/h2w/state. */
     if (on) {
-        /* Route to the headphone amp when a jack is inserted, else the
-         * speaker.  The kernel accdet does NOT auto-mute the inactive route
-         * (validated 2026-05-23: enabling both plays out of both at once), so
-         * userspace picks exactly one.  headphones_inserted() reads
-         * /sys/class/switch/h2w/state (button-y1.c).  Hot-plug while playing
-         * is handled by pcm_y1mtk_jack_reroute(). */
-        bool hp = headphones_inserted();
-        ioctl(eac_fd, hp ? SET_HEADPHONE_ON : SET_SPEAKER_ON,    1);
-        ioctl(eac_fd, hp ? SET_SPEAKER_OFF  : SET_HEADPHONE_OFF, 0);
+        route_active = true;
+        eac_apply_route();
     } else {
         ioctl(eac_fd, SET_SPEAKER_OFF,   0);
         ioctl(eac_fd, SET_HEADPHONE_OFF, 0);
+        route_active = false;
     }
-    route_active = on;
-}
-
-/* Re-route mid-stream when jack state changes.  Caller responsible for
- * detecting the transition (poll /sys/class/switch/h2w/state on the
- * worker thread or in a button-driver hook).  Both ioctls are cheap
- * (single SET on the amp HW) so we just blast both with the new state. */
-void pcm_y1mtk_jack_reroute(void)
-{
-    if (eac_fd < 0 || !route_active)
-        return;
-    bool hp = headphones_inserted();
-    ioctl(eac_fd, hp ? SET_SPEAKER_OFF   : SET_SPEAKER_ON,   hp ? 0 : 1);
-    ioctl(eac_fd, hp ? SET_HEADPHONE_ON  : SET_HEADPHONE_OFF, hp ? 1 : 0);
 }
 
 /* MT6323 codec write via SET_ANAAFE_REG (0xC0044302). Same struct shape as
@@ -607,6 +608,11 @@ void audiohw_preinit(void)
      * relies on this clean slate and reprograms everything in stream_start. */
     logf("Y1PCM preinit: AUD_RESTART");
     ioctl(eac_fd, AUD_RESTART, 0);
+
+    /* Sensible default before the HAVE_SPEAKER framework first resolves the
+     * route at settings-apply: speaker when nothing is plugged, headphones
+     * otherwise (matches "Auto"). */
+    want_speaker = !headphones_inserted();
     logf("Y1PCM preinit: done");
 }
 
@@ -656,6 +662,17 @@ void audiohw_mute(int mute)
 {
     (void)mute;
 }
+
+#ifdef HAVE_SPEAKER
+void audiohw_enable_speaker(bool on)
+{
+    /* Called by audio_enable_speaker() with the resolved Speaker-setting +
+     * jack decision: on => speaker, off => headphone.  Record it and apply
+     * immediately if a stream is live (eac_apply_route no-ops otherwise). */
+    want_speaker = on;
+    eac_apply_route();
+}
+#endif
 
 /* -------------------------------------------------------------------------- */
 /* pcm_sink interface — entry points the core calls through builtin_pcm_sink. */
