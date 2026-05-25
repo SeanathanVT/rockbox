@@ -157,9 +157,12 @@ radio/radioart.c
 #endif
 #endif
 
-#if INPUT_SRC_CAPS != 0
+#if INPUT_SRC_CAPS != 0 || defined(HAVE_SPEAKER)
+/* HAVE_SPEAKER targets with no input sources still need audio_path.c for
+ * audio_enable_speaker() (the rest of the file is behind the native/SPDIF
+ * guards). */
 audio_path.c
-#endif /* INPUT_SRC_CAPS != 0 */
+#endif
 audio_thread.c
 pcmbuf.c
 codec_thread.c

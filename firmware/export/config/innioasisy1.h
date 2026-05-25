@@ -52,6 +52,11 @@
  * physical-to-keycode map. */
 #define CONFIG_KEYPAD              INNIOASIS_Y1_PAD
 #define HAVE_HEADPHONE_DETECTION
+/* Built-in speaker + a headphone jack, both driven by /dev/eac amp ioctls.
+ * Enables the "Speaker" setting (Off/On/Auto); Auto routes to headphones when
+ * a jack is inserted and the speaker otherwise (pcm-y1mtk.c
+ * audiohw_enable_speaker).  Default is Auto for the Y1 (settings_list.c). */
+#define HAVE_SPEAKER
 
 #define HAVE_SCROLLWHEEL
 #define WHEELCLICKS_PER_ROTATION   24

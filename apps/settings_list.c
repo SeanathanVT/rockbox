@@ -2290,7 +2290,13 @@ const struct settings_list settings[] = {
                   false, "shortcuts instead of quickscreen", NULL),
 #endif
 #ifdef HAVE_SPEAKER
-    CHOICE_SETTING(0, speaker_mode, LANG_ENABLE_SPEAKER, 0, "speaker mode",
+    CHOICE_SETTING(0, speaker_mode, LANG_ENABLE_SPEAKER,
+# if defined(INNIOASIS_Y1) && defined(HAVE_HEADPHONE_DETECTION)
+                   2, /* Auto: speaker when nothing is plugged, headphones when inserted */
+# else
+                   0,
+# endif
+                   "speaker mode",
 # ifdef HAVE_HEADPHONE_DETECTION
                    "on,off,auto", audio_enable_speaker, 3, ID2P(LANG_OFF), ID2P(LANG_ON), ID2P(LANG_AUTO)),
 #else /* HAVE_HEADPHONE_DETECTION */
