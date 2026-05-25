@@ -2062,7 +2062,12 @@ const struct settings_list settings[] = {
 #endif
 #endif
 #ifdef HAVE_HEADPHONE_DETECTION
-    CHOICE_SETTING(0, unplug_mode, LANG_HEADPHONE_UNPLUG, 0,
+    CHOICE_SETTING(0, unplug_mode, LANG_HEADPHONE_UNPLUG,
+# if defined(INNIOASIS_Y1)
+                   1, /* Pause: stock-player behaviour when headphones are pulled */
+# else
+                   0,
+# endif
                    "pause on headphone unplug", "off,pause,pause and resume",
                    NULL, 3, ID2P(LANG_OFF), ID2P(LANG_PAUSE),
                    ID2P(LANG_HEADPHONE_UNPLUG_RESUME)),
