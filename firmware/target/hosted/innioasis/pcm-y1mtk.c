@@ -33,18 +33,23 @@
  *
  *   write(2) loop ...
  *
- * STATUS (2026-05-25): the full temporal session is now implemented --
- * AFE config (eac_afe_config_phase1) -> START_MEMIF -> prime + continuous
- * silence feed across the codec ramp/settle (eac_codec_ramp_phase3 + the feed
- * loop in stream_start) -> amps on -> volume ramp -> SR + DAC enable
- * (eac_afe_final_phase6), mirroring boot-test/y1_alive.c::test_audio, which is
- * the only sequence confirmed tone-audible on hardware.  Two integration bugs
- * that blocked this were fixed: a sink-lock self-deadlock in the mixer handoff
- * (recursive worker_mtx) and a get-more race that parked playback after one
- * chunk (hold the lock across pcm_play_dma_complete_callback).  Audible output
- * on real hardware is pending validation of these fixes.  Open follow-ups:
- * sample-rate switching (locked to 44.1k), jack-detect routing (both amps
- * forced on for now), DMA position reporting.  See docs/audio-stack.md.
+ * STATUS (2026-05-25): playback is audible on hardware.  The bring-up mirrors
+ * boot-test/y1_alive.c::test_audio: AFE config (eac_afe_config_phase1) ->
+ * START_MEMIF -> prime + silence feed across the codec ramp/settle
+ * (eac_codec_ramp_phase3 + the feed loop in stream_start) -> amps on -> volume
+ * ramp -> SR + DAC enable (eac_afe_final_phase6).  Three integration bugs vs
+ * the generic pcm/mixer layer had to be fixed to get here: (1) a sink-lock
+ * self-deadlock in the mixer handoff (recursive worker_mtx); (2) the worker
+ * drove only pcm_play_dma_complete_callback (get-more) and never
+ * pcm_play_dma_status_callback(PCM_DMAST_STARTED), so the mixer never mixed or
+ * advanced the channel and replayed a primed silent frame forever -- fixed by
+ * the two-step handoff in worker_main (cf. pcm-alsa.c); (3) audiohw_set_volume
+ * was a no-op while HAVE_SW_VOLUME_CONTROL needs it to call
+ * pcm_set_master_volume, so every sample was scaled to silence (cf.
+ * dummy_codec.c).  Output routes to headphone-or-speaker by jack detect.
+ * Sample rate is locked to 44.1k by design (HW_SAMPR_CAPS = SAMPR_CAP_44, so
+ * the DSP resamples everything; set_freq is a correct no-op).  See
+ * docs/audio-stack.md.
  */
 
 /* Route this file's logf() to DEBUGF/stderr (rockbox.err) in a -DDEBUG
@@ -116,8 +121,13 @@
 #define AFE_IRQ_CON             0x3A0
 #define AFE_IRQ_CNT1            0x3AC
 
-/* Ring buffer length. Kernel AUDDRV_DL1_MAX_BUFFER_LENGTH caps at 0x4000. */
-#define EAC_DL1_BUFFER_BYTES    0x2000  /* ~46 ms @ 44.1k S16 stereo */
+/* Ring buffer length. Kernel AUDDRV_DL1_MAX_BUFFER_LENGTH caps at 0x4000.
+ * Use the max (~93 ms @ 44.1k S16 stereo): the worker's get-more does the
+ * mixing under worker_mtx, which the cooperative threads also contend for via
+ * pcm_play_lock, so each refill cycle leaves a gap where the ring drains
+ * unfed.  The extra headroom over 0x2000 absorbs that jitter -- a too-small
+ * ring underruns at the gaps and crackles. */
+#define EAC_DL1_BUFFER_BYTES    0x4000
 
 /* Sample-rate index in the MTK AFE SR table (44100 -> 9). */
 #define EAC_SR_IDX_44100        9
@@ -220,20 +230,18 @@ static void eac_route_analog(bool on)
      * the right amp based on the jack-detect sysfs.  button-y1.c's
      * headphones_inserted() reads /sys/class/switch/h2w/state. */
     if (on) {
-        /* Force BOTH amps on -- this matches boot-test/y1_alive.c, the only
-         * sequence confirmed to produce audible output.  Jack-detect routing
-         * (headphone XOR speaker via /sys/class/switch/h2w/state) is deferred
-         * until the analog path is confirmed working, so we don't mask a dead
-         * codec behind a wrong-route guess. */
-        if (ioctl(eac_fd, SET_SPEAKER_ON,   1) < 0)
-            logf("eac spk: %s", strerror(errno));
-        if (ioctl(eac_fd, SET_HEADPHONE_ON, 1) < 0)
-            logf("eac hp: %s", strerror(errno));
+        /* Route to the headphone amp when a jack is inserted, else the
+         * speaker.  The kernel accdet does NOT auto-mute the inactive route
+         * (validated 2026-05-23: enabling both plays out of both at once), so
+         * userspace picks exactly one.  headphones_inserted() reads
+         * /sys/class/switch/h2w/state (button-y1.c).  Hot-plug while playing
+         * is handled by pcm_y1mtk_jack_reroute(). */
+        bool hp = headphones_inserted();
+        ioctl(eac_fd, hp ? SET_HEADPHONE_ON : SET_SPEAKER_ON,    1);
+        ioctl(eac_fd, hp ? SET_SPEAKER_OFF  : SET_HEADPHONE_OFF, 0);
     } else {
-        if (ioctl(eac_fd, SET_SPEAKER_OFF,   0) < 0)
-            logf("eac spk off: %s", strerror(errno));
-        if (ioctl(eac_fd, SET_HEADPHONE_OFF, 0) < 0)
-            logf("eac hp off: %s", strerror(errno));
+        ioctl(eac_fd, SET_SPEAKER_OFF,   0);
+        ioctl(eac_fd, SET_HEADPHONE_OFF, 0);
     }
     route_active = on;
 }
@@ -400,9 +408,12 @@ static ssize_t eac_write_silence(void)
 
 static void eac_prime_dma(void)
 {
-    logf("Y1PCM prime_dma: write 8192 (blocking)");
-    ssize_t n = eac_write_silence();
-    logf("Y1PCM prime_dma: returned n=%zd", n);
+    /* Fill the whole ring with silence so the DMA starts with a full buffer
+     * of cushion the instant the codec un-mutes. */
+    logf("Y1PCM prime_dma: fill ring (%d bytes)", EAC_DL1_BUFFER_BYTES);
+    for (int i = 0; i < EAC_DL1_BUFFER_BYTES / (2048 * 4); i++)
+        eac_write_silence();
+    logf("Y1PCM prime_dma: done");
 }
 
 static void stream_start(void)
