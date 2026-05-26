@@ -12,9 +12,14 @@
 \newcommand{\ButtonRight}{\btnfnt{Right}}
 \newcommand{\ButtonMenu}{\btnfnt{Back}}
 \newcommand{\ButtonPlay}{\btnfnt{Play}}
+% No dedicated power button; power-off is a long press of Play.
+\newcommand{\ButtonPower}{\ButtonPlay}
 \newcommand{\ButtonSelect}{\btnfnt{Select}}
 \newcommand{\ButtonScrollFwd}{\btnfnt{Scroll Forward}}
 \newcommand{\ButtonScrollBack}{\btnfnt{Scroll Backward}}
+% No physical up/down or Hold; 2D plugins use the scroll ring for up/down.
+\newcommand{\ButtonUp}{\ButtonScrollBack}
+\newcommand{\ButtonDown}{\ButtonScrollFwd}
 \newcommand{\ButtonHold}{\btnfnt{Hold}}
 
 %Button actions, standard context
@@ -69,6 +74,7 @@
 \newcommand{\ActionKbdDown}{\ButtonScrollFwd}
 \newcommand{\ActionKbdMorseInput}{Long \ButtonMenu}
 \newcommand{\ActionKbdMorseSelect}{\ButtonSelect}
+\newcommand{\ActionKbdPageFlip}{\fixme{n/a}} % Y1 keyboard has no page-flip
 
 %Button actions, Pitch Screen context
 \newcommand{\ActionPsToggleMode}{\ButtonPlay}
