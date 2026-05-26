@@ -23,6 +23,9 @@
 #include <string.h>
 #include <ucontext.h>
 #include <backtrace.h>
+#ifdef HAVE_POWEROFF_SYSCALL
+#include <sys/reboot.h>
+#endif
 
 #include "system.h"
 #include "mv.h"
@@ -100,7 +103,11 @@ void power_off(void)
     backlight_hw_off();
     button_close_device();
     sync();
+#ifdef HAVE_POWEROFF_SYSCALL
+    reboot(RB_POWER_OFF);
+#else
     system("/sbin/poweroff");
+#endif
     while (1) {
         // Make sure we're not throttling the cpu
         usleep(1000);
@@ -130,7 +137,12 @@ void system_init(void)
 void system_reboot(void)
 {
     backlight_hw_off();
+    sync();
+#ifdef HAVE_POWEROFF_SYSCALL
+    reboot(RB_AUTOBOOT);
+#else
     system("/sbin/reboot");
+#endif
     while (1) {
         // Make sure we're not throttling the cpu
         usleep(1000);
