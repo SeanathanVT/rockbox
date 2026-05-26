@@ -1,10 +1,11 @@
 /*
- * Innioasis Y1 — USB stubs.
+ * Innioasis Y1 — USB stubs (mass storage planned).
  *
- * Rockbox sees the Y1 as USB-less for now.  USB-C audio out is a Phase 6
- * stretch goal (kernel rebuild with snd-usb-audio); mass-storage UMS is
- * not planned — the player is loaded by mounting the eMMC user partition
- * from another host.
+ * Rockbox sees the Y1 as USB-less for now.  Mass-storage UMS (SD-card RW over
+ * USB) is feasible on the stock kernel via the android_usb gadget — no kernel
+ * rebuild — modelled on usb-fiio.c; see docs/usb-storage.md in the y1-platform
+ * repo for the implementation plan.  USB-C audio out (host mode) is a separate
+ * Phase 6 stretch goal (kernel rebuild with snd-usb-audio).
  */
 
 #include "config.h"
