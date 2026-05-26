@@ -15,4 +15,8 @@
 extern fb_data *framebuffer; /* defined in lcd-linuxfb.c */
 #define LCD_FRAMEBUF_ADDR(col, row) (framebuffer + (row) * LCD_WIDTH + (col))
 
+/* defined in lcd-memframe.c, called by lcd-linuxfb.c's lcd_enable path — every
+ * hosted lcd-target.h sharing lcd-memframe.c declares this. */
+extern void lcd_set_active(bool active);
+
 #endif /* __LCD_TARGET_H__ */
