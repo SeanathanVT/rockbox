@@ -29,6 +29,12 @@
 #define LCD_DEPTH       32
 #define LCD_PIXELFORMAT XRGB8888
 #define CONFIG_LCD      LCD_INGENIC_LINUX  /* fbdev-backed; reused from hibylinux family */
+/* Double-buffer the fbdev: lcd-linuxfb.c draws to the back plane and pans on
+ * update (FBIOPAN_DISPLAY), so dynamically-refreshed status-bar elements (the
+ * battery icon) don't flash mid-draw the way they do on a single, directly-
+ * displayed buffer.  Requires the mtkfb to have smem for two screens (it pans
+ * already); if not, init's FBIOPUT_VSCREENINFO panics loudly at boot. */
+#define FB_DOUBLEBUF
 
 #define HAVE_ALBUMART
 #define HAVE_BMP_SCALING
