@@ -77,6 +77,10 @@
 #define BATTERY_CAPACITY_INC     0
 #define BATTERY_DEV_NAME         "battery"
 #define POWER_DEV_NAME           "usb"
+/* A data host shows on usb/online (what usb-y1.c keys USB mass storage off), but
+ * a dumb wall/car charger registers on a separate "ac" (Mains) supply.  Read it
+ * too so the charging indicator works off a charger. */
+#define POWER_AC_DEV_NAME        "ac"
 
 /* MT6572 power_supply class exposes batt_vol (mV, raw — no scaling needed)
  * instead of the standard voltage_now (µV). Override the path and disable

@@ -81,6 +81,10 @@
 
 #define POWER_STATUS_PATH "/sys/class/power_supply/" POWER_DEV_NAME "/online"
 
+#ifdef POWER_AC_DEV_NAME
+#define POWER_AC_STATUS_PATH "/sys/class/power_supply/" POWER_AC_DEV_NAME "/online"
+#endif
+
 #ifdef BATTERY_DEV_NAME
 /* We get called multiple times per tick, let's cut that back! */
 static long last_tick = 0;
@@ -143,6 +147,14 @@ unsigned int power_input_status(void)
 {
     int present = 0;
     sysfs_get_int(POWER_STATUS_PATH, &present);
+
+#ifdef POWER_AC_STATUS_PATH
+    /* A dumb wall/car charger may show on a separate "ac"/Mains supply rather
+     * than the USB node; count it as charger-present so the charging indicator
+     * works off a charger (charging_state() reads battery/status either way). */
+    if (!present)
+        sysfs_get_int(POWER_AC_STATUS_PATH, &present);
+#endif
 
 #ifdef FIIO_M3K_LINUX
     usb_enable(present ? true : false);
