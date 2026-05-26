@@ -269,7 +269,7 @@ of before installing.
 \end{description}
 }
 
-\nopt{rgnano}{
+\nopt{rgnano,innioasisy1}{
   \subsection{Storage/Capacity Limits}
 }
 
@@ -325,12 +325,19 @@ It is also worth noting that you will not likely see improved data transfer rate
 }
 
 \section{Installing Rockbox}\label{sec:installing_rockbox}\index{Installation}
-\nopt{rgnano}{
+\nopt{rgnano,innioasisy1}{
   There are two ways to install Rockbox: automated and manual. The automated
   way is the preferred method of installing Rockbox for the majority of
   people. Rockbox Utility is a graphical application that does almost everything
   for you. However, should you encounter a problem, then the manual way is
   still available to you.\\
+}
+
+\opt{innioasisy1}{
+  Rockbox is installed on the \playertype{} by writing two firmware images to
+  the player with a flashing tool; this replaces the original firmware. There
+  is no automated installer for the \playertype{} yet, so follow the manual
+  instructions below.\\
 }
 
 \opt{rgnano}{
@@ -349,7 +356,7 @@ It is also worth noting that you will not likely see improved data transfer rate
   \end{itemize}
 }
 
-\opt{gigabeats,fiiom3k,shanlingq1}{
+\opt{gigabeats,fiiom3k,shanlingq1,innioasisy1}{
   \note{The automated install is not yet available for the
   \playerlongtype{}. For now you can use the manual method to install Rockbox.
   Please still read the section on the automatic install as it explains
@@ -405,6 +412,13 @@ All of the Rockbox code is contained in an .opk file. This makes it easy to
   \fname{rockbox} which contains all of the Rockbox files, and is
   located in the \fname{FunKey} folder of your \daps{} microSD card.
 }
+\opt{innioasisy1}{
+\item[The Rockbox firmware.]
+  Most of the Rockbox code is contained in a ``build'' that, on the
+  \playertype{}, is written to the player as a system image when you install
+  Rockbox (it replaces the original firmware). The build consists of a
+  directory called \fname{.rockbox} which contains all of the Rockbox files.
+}
 \end{description}
 
 Apart from the required parts there are some addons you might be interested
@@ -422,10 +436,10 @@ in installing.
 
 \subsection{Automated Installation}
 
-\opt{gigabeats,ondavx777,fiiom3k,shanlingq1,erosqnative}{
+\opt{gigabeats,ondavx777,fiiom3k,shanlingq1,erosqnative,innioasisy1}{
 \note{Rockbox Utility does not currently support the \playertype{} and you will
 therefore need to follow the manual install instructions.}}
-\nopt{erosqnative}{
+\nopt{erosqnative,innioasisy1}{
 To automatically install Rockbox, download the official installer and
 housekeeping tool \caps{Rockbox Utility}. It allows you to:
 \begin{itemize}
@@ -579,7 +593,7 @@ Please now go to \reference{ref:finish_install} to complete the installation pro
 
 \subsection{Manual Installation}
 
-\nopt{erosqnative}{
+\nopt{erosqnative,innioasisy1}{
 The manual installation method is still available to you, should you need or desire it
 by following the instructions below. If you have used Rockbox Utility
 to install Rockbox, then you do not need to follow the next section and can skip
@@ -593,6 +607,8 @@ straight to \reference{ref:finish_install}.
 
 \nopt{rgnano}{\subsubsection{Installing the firmware}\label{sec:installing_firmware}}
 \opt{rgnano}{\subsubsection{Installing the application}\label{sec:installing_firmware}}
+
+\opt{innioasisy1}{\input{getting_started/innioasisy1_install.tex}}
 
 \opt{gigabeats}{\note{When your \dap{} is in the Rockbox USB or bootloader
 USB mode, you will see two visible partitions -- the 150~MB firmware
@@ -608,6 +624,7 @@ data partition.}}
   \note{Remember that this operation will need to be repeated if you switch to a different SD card!}
 }
 
+\nopt{innioasisy1}{
 \begin{enumerate}
 \item Download your chosen version of Rockbox from the links in the
   previous section.
@@ -667,9 +684,10 @@ If the contents of the \fname{.zip} file are extracted correctly, you will
 have a directory called \fname{.rockbox}, which contains all the files needed
 by Rockbox, in the main directory of your \daps{} drive.
 }
+}
 
 \opt{swcodec}{%
-    \nopt{gigabeats,erosqnative,rgnano}{%
+    \nopt{gigabeats,erosqnative,rgnano,innioasisy1}{%
     \subsubsection{Installing the bootloader}
         \opt{iriverh100,iriverh300}{\input{getting_started/iriver_install.tex}}
         \opt{mpiohd200,mpiohd300}{\input{getting_started/mpio_install.tex}}
@@ -696,6 +714,11 @@ by Rockbox, in the main directory of your \daps{} drive.
 }
 
 \subsection{Finishing the install}\label{ref:finish_install}
+
+\opt{innioasisy1}{
+  Once both images have been written, disconnect the USB cable and reset the
+  \dap{}. It should boot straight into Rockbox.
+}
 
 \opt{gigabeatf}{
   After installing you \emph{need} to power-cycle the
@@ -856,18 +879,27 @@ you turn the unit on, Rockbox should load.}
 
 \section{Updating Rockbox}
 
-\nopt{erosqnative}{
+\nopt{erosqnative,innioasisy1}{
 Rockbox can be easily updated with Rockbox Utility. You can also update Rockbox
 }
 \opt{erosqnative}{
 The Native Port to \playername{} is not supported by Rockbox Utility yet, so Rockbox Utility cannot update it.
 Rockbox is easily updated
 }
+\nopt{innioasisy1}{
 manually -- download a Rockbox build
 as detailed above, and unzip the build to the root directory
 of your \dap{} as in the manual installation stage. If your unzip
 program asks you whether to overwrite files, choose the ``Yes to all'' option.
 The new build will be installed over your current build.\\
+}
+
+\opt{innioasisy1}{
+To update Rockbox, download a newer build and write its system image to the
+\dap{} with \fname{mtkclient}, exactly as during installation
+(\reference{sec:installing_firmware}). The boot image only changes rarely and
+does not normally need to be rewritten.\\
+}
 
 \opt{gigabeats}{
   \note{When your \dap{} is in the Rockbox USB or bootloader
@@ -877,12 +909,12 @@ The new build will be installed over your current build.\\
   data partition.\\}
 }
 
-\nopt{erosqnative,rgnano}{
+\nopt{erosqnative,rgnano,innioasisy1}{
 The bootloader only changes rarely, and should not normally
 need to be updated.\\
 }
 
-\nopt{erosqnative}{
+\nopt{erosqnative,innioasisy1}{
 \note{If you use Rockbox Utility be aware that it cannot detect manually
         installed components.\\}
 }
@@ -892,17 +924,17 @@ need to be updated.\\
   file in the \fname{Applications} folder of the microSD card with a newer version.
 }
 
-\section{Uninstalling Rockbox}\index{Installation!uninstall}
+\section{Uninstalling Rockbox}\label{sec:uninstall}\index{Installation!uninstall}
 
-\nopt{gigabeatf,iaudiom3,iaudiom5,iaudiox5,mrobe100,gigabeats,fuzeplus,erosqnative,rgnano}{
+\nopt{gigabeatf,iaudiom3,iaudiom5,iaudiox5,mrobe100,gigabeats,fuzeplus,erosqnative,rgnano,innioasisy1}{
   \note{The Rockbox bootloader allows you to choose between Rockbox and
   the original firmware. (See \reference{ref:Dualboot} for more information.)}
 }
 
 \subsection{Automatic Uninstallation}
-\opt{gigabeats,erosqnative,rgnano}{\note{Rockbox can only be uninstalled manually from the \playername{} for now.}}
+\opt{gigabeats,erosqnative,rgnano,innioasisy1}{\note{Rockbox can only be uninstalled manually from the \playername{} for now.}}
 
-\nopt{erosqnative,rgnano}{
+\nopt{erosqnative,rgnano,innioasisy1}{
   You can uninstall Rockbox automatically by using Rockbox Utility. If you
   installed Rockbox manually you can still use Rockbox Utility for uninstallation
   but will not be able to do this selectively.
@@ -913,6 +945,14 @@ the fact that it requires a flashing procedure. To uninstall the bootloader
 completely follow the manual uninstallation instructions below.}}
 
 \subsection{Manual Uninstallation}
+
+\opt{innioasisy1}{
+  To return to the original firmware, write the stock \fname{boot.img} and
+  \fname{system.img} back to the \fname{BOOTIMG} and \fname{ANDROID}
+  partitions with \fname{mtkclient}, in the same way as installing
+  (\reference{sec:installing_firmware}). This requires a backup of the
+  original images taken before installing Rockbox.
+}
 
 \opt{iriverh10,iriverh10_5gb,mrobe100,vibe500,samsungyh}{
   If you would like to go back to using the original \playerman{} software,
@@ -1002,7 +1042,7 @@ completely follow the manual uninstallation instructions below.}}
     \end{enumerate}
 }
 
-\nopt{gigabeats,rgnano}{
+\nopt{gigabeats,rgnano,innioasisy1}{
   If you wish to clean up your disk, you may also wish to delete the
   \fname{.rockbox} directory and its contents.
   \nopt{iaudiom3,iaudiom5,iaudiox5,fiiom3k,shanlingq1}{
