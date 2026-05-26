@@ -1,0 +1,29 @@
+% $Id$ %
+\def\UseOption{innioasisy1}
+\edef\UseOption{\UseOption,INNIOASIS_Y1_PAD}
+\edef\UseOption{\UseOption,HAVE_BACKLIGHT}
+\edef\UseOption{\UseOption,HAVE_BACKLIGHT_BRIGHTNESS}
+\edef\UseOption{\UseOption,HAVE_LCD_COLOR}
+\edef\UseOption{\UseOption,HAVE_HEADPHONE_DETECTION}
+\edef\UseOption{\UseOption,HAVE_HOTSWAP}
+\edef\UseOption{\UseOption,HAVE_SCROLLWHEEL}
+\edef\UseOption{\UseOption,innioasis}
+
+\newcommand{\playerman}{Innioasis}
+\newcommand{\playertype}{Y1}
+\newcommand{\playerlongtype}{\playertype}
+\newcommand{\dapdisplaywidth}{480}
+\newcommand{\dapdisplayheight}{360}
+\newcommand{\dapdisplaydepth}{24}
+\newcommand{\specimg}{innioasisy1}
+%Used to name the player, e.g. ...to the \dap
+\newcommand{\dap}{player}
+%For use when referring to the player. E.g. the \daps\ capacity ...
+\newcommand{\daps}{player's}
+\newcommand{\firmwarefilename}{\fname{rockbox.y1}}
+\newcommand{\firmwareextension}{\fname{y1}}
+\newcommand{\screenshotsize}{8cm}
+\newcommand{\disk}{microSD card}
+
+% link external keymap file
+\input{platform/keymap-innioasisy1.tex}
