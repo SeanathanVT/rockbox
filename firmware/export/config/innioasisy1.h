@@ -93,6 +93,10 @@
 #define HAVE_USB_POWER
 #define CONFIG_CHARGING CHARGING_MONITOR
 #define HAVE_SW_POWEROFF
+/* We own the rootfs — there is no /sbin/poweroff or /sbin/reboot to shell out to
+ * (the initramfs ships only busybox).  Drive shutdown/reboot through the reboot()
+ * syscall directly, like the Sony NWZ target.  See system-hosted.c. */
+#define HAVE_POWEROFF_SYSCALL
 
 /* RTC handled by hosted-Linux layer */
 #define CONFIG_RTC RTC_HOSTED
