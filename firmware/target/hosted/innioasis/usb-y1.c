@@ -11,21 +11,28 @@
  * Safety: USB mass storage gives the host raw block access, so we must fully
  * unmount the SD before exposing it, and never expose it while still mounted
  * (concurrent FAT + raw writes corrupt the card).  The interlocks below enforce
- * that; on disconnect we reboot for a clean remount rather than revalidate the
- * dircache/tagcache against a filesystem the host may have rewritten.
+ * that.  On disconnect we remount the SD and continue -- the same model as the
+ * Hiby hosted target (usb-hiby.c) and the iPod: the generic USB framework
+ * reloads tagcache, and the Y1 has no dircache to rebuild.
  */
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/mount.h>
-#include <sys/reboot.h>
 #include "config.h"
 #include "disk.h"
 #include "usb.h"
 #include "sysfs.h"
 #include "power.h"
 #include "logf.h"
+
+#ifdef HAVE_MULTIDRIVE
+/* defined in firmware/target/hosted/filesystem-app.c */
+void cleanup_rbhome(void);
+void startup_rbhome(void);
+#endif
 
 #define ANDROID_USB    "/sys/class/android_usb/android0"
 #define LUN_FILE       ANDROID_USB "/f_mass_storage/lun/file"
@@ -93,10 +100,14 @@ void usb_enable(bool on)
 /* Called by the USB thread once all threads have released storage. */
 int disk_unmount_all(void)
 {
+#ifdef HAVE_MULTIDRIVE
+    cleanup_rbhome();
+#endif
     sync();
     /* Real unmount (not MNT_DETACH — a lazy unmount would leave the kernel mount
-     * live under the host's raw writes).  Succeeds only once dircache/tagcache/
-     * config fds on the SD are closed; if it can't, usb_enable() declines. */
+     * live under the host's raw writes).  Succeeds only once the SD's open fds
+     * (config/tagcache under RB_WRITABLE_DIR) are closed by the
+     * SYS_EVENT_USB_INSERTED handshake; if it can't, usb_enable() declines. */
     sd_released = (umount(SD_MOUNTPOINT) == 0);
     if (!sd_released)
         logf("usb-y1: umount %s failed (busy)", SD_MOUNTPOINT);
@@ -106,17 +117,19 @@ int disk_unmount_all(void)
 /* Called by the USB thread after the host disconnects. */
 int disk_mount_all(void)
 {
+    /* Remount the SD and carry on — no reboot.  The host had raw block access;
+     * a fresh mount re-reads the FAT so the file browser sees its changes, and
+     * the generic USB framework reloads tagcache (the Y1 has no dircache).
+     * Mirrors usb-hiby.c / the iPod's re-read-on-disconnect behaviour. */
     if (sd_released)
     {
-        /* The host had raw block access; reboot for a clean remount + cache
-         * rebuild rather than trust stale dircache/tagcache.  reboot() comes
-         * from HAVE_POWEROFF_SYSCALL; it does not return. */
-        sync();
-        reboot(RB_AUTOBOOT);
-        /* Only reached if reboot() failed — best-effort remount so we don't
-         * panic in the caller. */
-        mount(SD_PART_DEV, SD_MOUNTPOINT, "vfat", MS_NOATIME, "utf8");
+        if (mount(SD_PART_DEV, SD_MOUNTPOINT, "vfat", MS_NOATIME, "utf8") != 0
+            && errno != EBUSY)
+            logf("usb-y1: remount %s failed: %d", SD_MOUNTPOINT, errno);
         sd_released = false;
     }
+#ifdef HAVE_MULTIDRIVE
+    startup_rbhome();
+#endif
     return 1;
 }
