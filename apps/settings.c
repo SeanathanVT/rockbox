@@ -663,6 +663,11 @@ static bool settings_write_config(const char* filename, int options)
         open_plugin_export(fd);
     }
 #endif
+#ifdef HAVE_SETTINGS_FSYNC
+    /* Force this small, infrequent write out of the page cache so a hard reset
+     * within the kernel writeback window doesn't lose it (see config header). */
+    fsync(fd);
+#endif
     close(fd);
     return true;
 }
