@@ -1,0 +1,49 @@
+% Innioasis Y1 -- manual install via mtkclient (BROM mode).
+% The Y1 is a hosted-Linux target: installing Rockbox replaces the original
+% firmware on the BOOTIMG and SYSTEM partitions.  There is no Rockbox Utility
+% support and nothing is copied onto a mounted drive; both images are written
+% with mtkclient while the player is in its boot ROM (BROM) mode.
+
+Installing Rockbox on the \playertype{} replaces the original firmware. It is
+written with \fname{mtkclient}, a free flashing tool that talks to the
+\daps{} boot ROM (BROM), so no part of the original firmware needs to be
+running. The download contains two image files:
+
+\begin{description}
+\item[The boot image.] A small image written to the \fname{BOOTIMG} partition.
+  It contains the Linux kernel and a minimal start-up program that locates and
+  launches Rockbox. It rarely changes and only needs to be written once.
+\item[The system image.] An image written to the \fname{ANDROID} partition. It
+  is a filesystem holding the main Rockbox binary and the \fname{.rockbox}
+  directory (codecs, plugins, fonts and themes).
+\end{description}
+
+\warn{Flashing replaces the original firmware entirely; the \playertype{} has
+no dual boot. Before you start, make a backup of the stock \fname{boot.img} and
+\fname{system.img} so you can return to the original firmware later (see
+\reference{sec:uninstall}). Only ever write the \fname{BOOTIMG} and
+\fname{ANDROID} partitions -- writing any other partition (in particular the
+preloader) can leave the \dap{} unrecoverable without specialist tools.}
+
+\begin{enumerate}
+\item Install \fname{mtkclient} on your computer by following the instructions
+  at \url{https://github.com/bkerler/mtkclient}. This provides the \fname{mtk}
+  command used below.
+
+\item Download your chosen version of Rockbox from the links in the previous
+  section and unzip it. You will have two image files, one for the boot
+  partition and one for the system partition.
+
+\item Power the \dap{} off completely and disconnect it from the computer.
+
+\item Put the \dap{} into BROM mode and connect it to the computer with a USB
+  cable. On the \playertype{} this is done by holding the recessed reset
+  button (reachable through the pin-hole) while plugging in the cable.
+
+\item Write both images, substituting the file names of the images you
+  downloaded:
+\begin{code}
+    mtk w bootimg <boot-image-file>
+    mtk w android <system-image-file>
+\end{code}
+\end{enumerate}
