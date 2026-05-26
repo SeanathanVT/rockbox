@@ -1,37 +1,122 @@
 /*
- * Innioasis Y1 — USB stubs (mass storage planned).
+ * Innioasis Y1 — USB mass storage (microSD RW over USB).
  *
- * Rockbox sees the Y1 as USB-less for now.  Mass-storage UMS (SD-card RW over
- * USB) is feasible on the stock kernel via the android_usb gadget — no kernel
- * rebuild — modelled on usb-fiio.c; see docs/usb-storage.md in the y1-platform
- * repo for the implementation plan.  USB-C audio out (host mode) is a separate
- * Phase 6 stretch goal (kernel rebuild with snd-usb-audio).
+ * The stock MT6572 kernel ships the android_usb composite gadget with the
+ * mass_storage function built in (proven by the stock init.usb.rc); we drive it
+ * from /sys/class/android_usb/android0/ — no kernel rebuild.  Modelled on the
+ * hosted-Linux FiiO target (firmware/target/hosted/fiio/usb-fiio.c).  Full design
+ * notes, the concurrency model, and the on-device checks are in the y1-platform
+ * repo: docs/usb-storage.md.
+ *
+ * Safety: USB mass storage gives the host raw block access, so we must fully
+ * unmount the SD before exposing it, and never expose it while still mounted
+ * (concurrent FAT + raw writes corrupt the card).  The interlocks below enforce
+ * that; on disconnect we reboot for a clean remount rather than revalidate the
+ * dircache/tagcache against a filesystem the host may have rewritten.
  */
 
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/mount.h>
+#include <sys/reboot.h>
 #include "config.h"
-#include "usb.h"
 #include "disk.h"
+#include "usb.h"
+#include "sysfs.h"
+#include "power.h"
+#include "logf.h"
 
-int usb_detect(void)
-{
-    return USB_EXTRACTED;
-}
+#define ANDROID_USB    "/sys/class/android_usb/android0"
+#define LUN_FILE       ANDROID_USB "/f_mass_storage/lun/file"
+/* Whole-disk node so the host sees the partition table; init also creates the
+ * partition node we mount.  init mounts mmcblk1p1 at MULTIDRIVE_DIR. */
+#define SD_DISK_DEV    "/dev/block/mmcblk1"
+#define SD_PART_DEV    "/dev/block/mmcblk1p1"
+#define SD_MOUNTPOINT  MULTIDRIVE_DIR   /* "/storage/sdcard1" */
+
+static const char sysfs_usb_online[] = "/sys/class/power_supply/usb/online";
+
+/* The android_usb gadget is built into the stock kernel; if it's ever absent
+ * (a kernel without CONFIG_USB_G_ANDROID), keep the whole feature inert so we
+ * never unmount the SD for nothing. */
+static bool gadget_present = false;
+/* Set when we actually unmounted the SD, so we only expose it / reboot when we
+ * truly took it away from Rockbox. */
+static bool sd_released = false;
 
 void usb_init_device(void)
 {
+    gadget_present = (access(ANDROID_USB "/enable", F_OK) == 0);
+}
+
+int usb_detect(void)
+{
+    if (!gadget_present)
+        return USB_EXTRACTED;
+
+    int present = 0;
+    sysfs_get_int(sysfs_usb_online, &present);
+    return present ? USB_INSERTED : USB_EXTRACTED;
 }
 
 void usb_enable(bool on)
 {
-    (void)on;
+    if (!gadget_present)
+        return;
+
+    if (on)
+    {
+        /* Interlock: only hand the block device to the host if disk_unmount_all
+         * actually released the SD.  If the unmount failed (open files), decline
+         * rather than risk concurrent FAT + raw access. */
+        if (!sd_released)
+        {
+            logf("usb-y1: SD not released, not exposing mass storage");
+            return;
+        }
+
+        sysfs_set_int(ANDROID_USB "/enable", 0);
+        sysfs_set_string(ANDROID_USB "/idVendor", USB_VID_STR);
+        sysfs_set_string(ANDROID_USB "/idProduct", USB_PID_STR);
+        sysfs_set_string(ANDROID_USB "/functions", "mass_storage");
+        sysfs_set_string(LUN_FILE, SD_DISK_DEV);
+        sysfs_set_int(ANDROID_USB "/enable", 1);
+    }
+    else
+    {
+        sysfs_set_int(ANDROID_USB "/enable", 0);
+        sysfs_set_string(LUN_FILE, "");
+    }
 }
 
-int disk_mount_all(void)
+/* Called by the USB thread once all threads have released storage. */
+int disk_unmount_all(void)
 {
+    sync();
+    /* Real unmount (not MNT_DETACH — a lazy unmount would leave the kernel mount
+     * live under the host's raw writes).  Succeeds only once dircache/tagcache/
+     * config fds on the SD are closed; if it can't, usb_enable() declines. */
+    sd_released = (umount(SD_MOUNTPOINT) == 0);
+    if (!sd_released)
+        logf("usb-y1: umount %s failed (busy)", SD_MOUNTPOINT);
     return 1;
 }
 
-int disk_unmount_all(void)
+/* Called by the USB thread after the host disconnects. */
+int disk_mount_all(void)
 {
+    if (sd_released)
+    {
+        /* The host had raw block access; reboot for a clean remount + cache
+         * rebuild rather than trust stale dircache/tagcache.  reboot() comes
+         * from HAVE_POWEROFF_SYSCALL; it does not return. */
+        sync();
+        reboot(RB_AUTOBOOT);
+        /* Only reached if reboot() failed — best-effort remount so we don't
+         * panic in the caller. */
+        mount(SD_PART_DEV, SD_MOUNTPOINT, "vfat", MS_NOATIME, "utf8");
+        sd_released = false;
+    }
     return 1;
 }
