@@ -87,8 +87,10 @@ void usb_enable(bool on)
         sysfs_set_string(ANDROID_USB "/idVendor", USB_VID_STR);
         sysfs_set_string(ANDROID_USB "/idProduct", USB_PID_STR);
         /* USB device descriptor strings (lsusb / OS device name). The SCSI
-         * INQUIRY model ("Linux File-CD Gadget") is baked into the kernel's
-         * f_mass_storage and isn't overridable here. */
+         * INQUIRY string defaults to "Linux File-CD Gadget" but can be overridden
+         * via ANDROID_USB "/f_mass_storage/inquiry_string" if a host ever needs a
+         * specific one. The LUN is already removable in-kernel (android.c sets
+         * luns[].removable = 1), so no sysfs toggle is needed. */
         sysfs_set_string(ANDROID_USB "/iManufacturer", "Innioasis");
         sysfs_set_string(ANDROID_USB "/iProduct", "Y1");
         sysfs_set_string(ANDROID_USB "/functions", "mass_storage");
