@@ -36,6 +36,12 @@ void startup_rbhome(void);
 
 #define ANDROID_USB    "/sys/class/android_usb/android0"
 #define LUN_FILE       ANDROID_USB "/f_mass_storage/lun/file"
+/* Some hosts (notably car head units) only index storage that advertises itself
+ * as a *removable* disk and ignore a fixed disk -- the Kia GEN5W manual lists
+ * "USB devices that are not recognized as removable disks" as unsupported. Mark
+ * the LUN removable before enabling. Best-effort: a no-op on kernels that don't
+ * expose the attribute. */
+#define LUN_REMOVABLE  ANDROID_USB "/f_mass_storage/lun/removable"
 /* Whole-disk node so the host sees the partition table; init also creates the
  * partition node we mount.  init mounts mmcblk1p1 at MULTIDRIVE_DIR. */
 #define SD_DISK_DEV    "/dev/block/mmcblk1"
@@ -92,6 +98,7 @@ void usb_enable(bool on)
         sysfs_set_string(ANDROID_USB "/iManufacturer", "Innioasis");
         sysfs_set_string(ANDROID_USB "/iProduct", "Y1");
         sysfs_set_string(ANDROID_USB "/functions", "mass_storage");
+        sysfs_set_int(LUN_REMOVABLE, 1);
         sysfs_set_string(LUN_FILE, SD_DISK_DEV);
         sysfs_set_int(ANDROID_USB "/enable", 1);
     }
