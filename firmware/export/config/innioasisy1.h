@@ -105,6 +105,10 @@
 #define CONFIG_STORAGE          STORAGE_HOSTFS
 #define HOSTFS_VOL_DEC          "microSD"
 #define HAVE_STORAGE_FLUSH
+/* fsync config/resume writes: the device owns its rootfs and can be hard-reset,
+ * so a tiny page-cached write would otherwise be lost before the kernel's
+ * periodic writeback flushes it.  See apps/settings.c and docs/persistence.md. */
+#define HAVE_SETTINGS_FSYNC
 #define HAVE_MULTIDRIVE
 #define NUM_DRIVES              2
 #define HAVE_HOTSWAP
