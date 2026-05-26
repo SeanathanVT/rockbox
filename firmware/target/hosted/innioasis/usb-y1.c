@@ -86,6 +86,11 @@ void usb_enable(bool on)
         sysfs_set_int(ANDROID_USB "/enable", 0);
         sysfs_set_string(ANDROID_USB "/idVendor", USB_VID_STR);
         sysfs_set_string(ANDROID_USB "/idProduct", USB_PID_STR);
+        /* USB device descriptor strings (lsusb / OS device name). The SCSI
+         * INQUIRY model ("Linux File-CD Gadget") is baked into the kernel's
+         * f_mass_storage and isn't overridable here. */
+        sysfs_set_string(ANDROID_USB "/iManufacturer", "Innioasis");
+        sysfs_set_string(ANDROID_USB "/iProduct", "Y1");
         sysfs_set_string(ANDROID_USB "/functions", "mass_storage");
         sysfs_set_string(LUN_FILE, SD_DISK_DEV);
         sysfs_set_int(ANDROID_USB "/enable", 1);
