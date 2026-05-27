@@ -128,6 +128,13 @@ void lcd_init_device(void)
 
     memset(framebuffer, 0, finfo.smem_len);
 
+    /* Unblank the panel. On the Y1's mtkfb the panel is left blanked when fbdev
+     * takes over from the boot logo, so without this it scans out dark
+     * regardless of fb content (matches fb_paint, which must FBIOBLANK 0 before
+     * anything shows). NOTE: the ioctl *request* is FBIOBLANK; FB_BLANK_UNBLANK
+     * is its argument -- passing FB_BLANK_UNBLANK as the request is a no-op. */
+    ioctl(fd, FBIOBLANK, FB_BLANK_UNBLANK);
+
 #ifdef HAVE_LCD_ENABLE
     lcd_set_active(true);
 #endif
@@ -155,11 +162,11 @@ void lcd_enable(bool on)
 
     if (on) {
         send_event(LCD_EVENT_ACTIVATION, NULL);
-        ioctl(fd, FB_BLANK_UNBLANK);
+        ioctl(fd, FBIOBLANK, FB_BLANK_UNBLANK);
     } else {
         memset(framebuffer, 0, finfo.smem_len);
         redraw();
-        ioctl(fd, FB_BLANK_POWERDOWN);
+        ioctl(fd, FBIOBLANK, FB_BLANK_POWERDOWN);
     }
 }
 #endif
