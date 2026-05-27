@@ -117,6 +117,15 @@ void lcd_init_device(void)
                vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
         }
     }
+
+    /* We render into buffer 0, but the bootloader can leave the panel scanning
+     * a non-zero pan offset -- the Y1's mtkfb parks the boot logo in buffer 1
+     * (yoffset == LCD_HEIGHT, since the fb is multi-buffered). redraw() pans
+     * with this inherited vinfo, so without resetting the origin every
+     * FBIOPAN_DISPLAY keeps showing the stale logo buffer and our output is
+     * never scanned out. */
+    vinfo.xoffset = 0;
+    vinfo.yoffset = 0;
 #endif
 
     /* map framebuffer */
