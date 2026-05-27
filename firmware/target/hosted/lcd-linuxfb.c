@@ -166,7 +166,11 @@ void lcd_enable(bool on)
     } else {
         memset(framebuffer, 0, finfo.smem_len);
         redraw();
-        ioctl(fd, FBIOBLANK, FB_BLANK_POWERDOWN);
+        /* Don't FB_BLANK_POWERDOWN here: on the Y1's mtkfb that drives the
+         * LCM-suspend + DSI-shutdown path, which hangs this panel's bring-up
+         * and resets the device. The panel is already power-gated via the
+         * fb0/blank sysfs write in backlight_hw_off(); blanking to black is
+         * enough. */
     }
 }
 #endif
