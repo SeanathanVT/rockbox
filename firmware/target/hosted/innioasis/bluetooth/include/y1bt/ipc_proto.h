@@ -13,13 +13,19 @@
 #include <stdint.h>
 #include <stdatomic.h>
 
-#define Y1BT_CTRL_SOCK_PATH   "/var/run/y1btd.sock"
-#define Y1BT_PCM_RING_PATH    "/dev/shm/y1btd-pcm"
-#define Y1BT_ART_IN_DIR       "/var/cache/y1bt/art-in"
-#define Y1BT_ART_OUT_DIR      "/var/cache/y1bt/art-out"
-#define Y1BT_STATE_DIR        "/var/lib/y1btd"
-#define Y1BT_CONFIG_PATH      "/etc/y1bt.conf"
-#define Y1BT_NVRAM_PATH       "/etc/y1bt/btnvram.bin"
+/* All persistent state lives under /storage/sdcard1/.btd/ (the internal SD,
+ * mounted into the Rockbox chroot at the same path). Survives SYSTEM
+ * reflash; debuggable by pulling the card. The Y1 has no /var, /etc, or
+ * /dev/shm pre-set — putting everything on SD avoids needing tmpfs mounts
+ * for first-light. */
+#define Y1BT_STATE_DIR        "/storage/sdcard1/.btd"
+#define Y1BT_CTRL_SOCK_PATH   "/storage/sdcard1/.btd/sock"
+#define Y1BT_PCM_RING_PATH    "/storage/sdcard1/.btd/pcm"
+#define Y1BT_ART_IN_DIR       "/storage/sdcard1/.btd/art-in"
+#define Y1BT_ART_OUT_DIR      "/storage/sdcard1/.btd/art-out"
+#define Y1BT_CONFIG_PATH      "/storage/sdcard1/.btd/y1bt.conf"
+#define Y1BT_NVRAM_PATH       "/storage/sdcard1/.btd/btnvram.bin"
+#define Y1BT_LOG_PATH         "/storage/sdcard1/Y1_btd.log"
 
 /* ----- PCM ring ----- */
 
