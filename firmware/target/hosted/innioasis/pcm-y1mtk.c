@@ -69,6 +69,7 @@
 #include "kernel.h"
 #include "panic.h"
 #include "logf.h"
+#include "bluetooth/bt-client.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -170,6 +171,9 @@ static volatile bool worker_paused = false;
  * first get-more already has mixed data -- skip the mix-ahead status callback
  * exactly once after a (re)start to stay in phase with the double buffer. */
 static bool mixer_primed = false;
+/* Worker's view of the BT-output toggle, so it can re-apply the amp route the
+ * moment the user flips it mid-playback (the flag itself lives in bt-client). */
+static bool bt_routing = false;
 
 /* -------------------------------------------------------------------------- */
 /* AFE register writes via SET_AUDSYS_REG.                                    */
@@ -236,6 +240,15 @@ static void eac_apply_route(void)
 {
     if (eac_fd < 0 || !route_active)
         return;
+    /* When BT output is selected the audio goes to the speaker over A2DP;
+     * the eac DMA keeps running (it paces the worker at the 44.1k hardware
+     * clock and feeds the BT ring), but both local amps stay off so nothing
+     * comes out of the on-board speaker/headphone. */
+    if (bt_client_is_output()) {
+        ioctl(eac_fd, SET_SPEAKER_OFF,   0);
+        ioctl(eac_fd, SET_HEADPHONE_OFF, 0);
+        return;
+    }
     if (want_speaker) {
         ioctl(eac_fd, SET_HEADPHONE_OFF, 0);
         ioctl(eac_fd, SET_SPEAKER_ON,    1);
@@ -502,6 +515,19 @@ static void *worker_main(void *arg)
             break;
 
         enum pcm_dma_status final_status = PCM_DMAST_OK;
+
+        /* BT output: mirror this mixed buffer (44.1k S16 stereo, same format
+         * as the ring) into the daemon's PCM ring for SBC/A2DP.  The eac write
+         * below still runs to pace the loop at the hardware clock, but the
+         * local amps are muted via eac_apply_route().  bt_client_pcm_write
+         * drops frames if the ring is full, so it can't stall the worker. */
+        bool bt_out = bt_client_is_output();
+        if (bt_out != bt_routing) {
+            bt_routing = bt_out;
+            eac_apply_route();          /* mute local amps on, restore off */
+        }
+        if (bt_out && addr && size)
+            bt_client_pcm_write((const int16_t *) addr, size / 4);
 
         while (size > 0 && !worker_quit)
         {

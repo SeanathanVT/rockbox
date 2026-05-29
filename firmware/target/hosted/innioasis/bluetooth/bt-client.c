@@ -3,7 +3,7 @@
  *
  * Two channels:
  *  - control: UNIX SOCK_STREAM at /var/run/y1btd.sock, line-delimited JSON.
- *  - PCM:     SPSC ring at /dev/shm/y1btd-pcm, mmap'd.
+ *  - PCM:     SPSC ring at Y1BT_PCM_RING_PATH (/tmp/y1btd-pcm), mmap'd.
  *
  * Threading model:
  *  - Public API (bt_client_set_*, bt_client_pcm_write) is callable from any
