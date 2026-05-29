@@ -6,20 +6,26 @@
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
  *
- * AVRCP glue between Rockbox playback and the y1-btd Bluetooth daemon.
+ * Bluetooth AVRCP glue: publishes Rockbox playback state (now-playing,
+ * status, position, volume, battery) to a connected Bluetooth sink, and
+ * applies inbound remote-control keys + absolute volume from it.
  *
- * Outbound (Rockbox -> daemon -> Controller):
- *   - now-playing metadata: on PLAYBACK_EVENT_TRACK_CHANGE / CUR_TRACK_READY
- *     (runs on the playback thread; bt_client_set_* only writes the control
- *     socket, so it's safe there).
- *   - playback status / position / volume / battery: polled by a dedicated
- *     Rockbox dispatcher thread (audio_*/sound_* are safe from a real Rockbox
- *     thread, unlike the bt-client pump pthread).
+ * Device-agnostic: all transport goes through the abstract backend in
+ * <bluetooth_backend.h>, which a target implements for its own Bluetooth
+ * stack.  Nothing here knows how the bytes reach the controller.
  *
- * Inbound (Controller -> daemon -> Rockbox):
- *   - passthrough keys + absolute volume arrive on the bt-client PUMP pthread.
- *     Its handlers must NOT touch Rockbox APIs, so they only push onto a
- *     lock-free SPSC ring; the dispatcher thread drains it and drives playback.
+ *   Outbound: now-playing fires from playback events (on the playback thread);
+ *   status / position / volume / battery are polled by a dedicated dispatcher
+ *   thread (the audio_*/sound_* APIs must run on a Rockbox thread).
+ *
+ *   Inbound: the backend may deliver keys / volume from its own thread, so its
+ *   handlers only push onto a lock-free SPSC ring; the dispatcher drains it and
+ *   drives playback.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  ****************************************************************************/
 #include "config.h"
 
@@ -27,7 +33,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
-#include <string.h>
 
 #include "kernel.h"
 #include "thread.h"
@@ -38,21 +43,17 @@
 #include "sound.h"
 #include "powermgmt.h"
 
-#include "bluetooth/bt-client.h"
-#include "y1bt/ipc_proto.h"
+#include "bluetooth_backend.h"
 
-/* ---- inbound (pump pthread -> dispatcher) lock-free SPSC ring ---- */
+/* ---- inbound (backend thread -> dispatcher) lock-free SPSC ring ---- */
 
-enum { IN_PASSTHROUGH = 0, IN_VOLUME };
-enum pt_op { PT_NONE = 0, PT_PLAY, PT_PAUSE, PT_STOP, PT_NEXT, PT_PREV,
-             PT_FF, PT_RW, PT_VOLUP, PT_VOLDN };
-
-struct in_ev { uint8_t kind; uint8_t arg; };   /* PASSTHROUGH: arg=pt_op; VOLUME: arg=percent */
+enum { IN_KEY = 0, IN_VOLUME };
+struct in_ev { uint8_t kind; uint8_t arg; };   /* KEY: arg=enum bt_remote_key; VOLUME: arg=percent */
 
 #define IN_RING 16
 static struct in_ev      in_ring[IN_RING];
-static _Atomic unsigned  in_head;   /* producer = pump pthread  */
-static _Atomic unsigned  in_tail;   /* consumer = dispatcher    */
+static _Atomic unsigned  in_head;   /* producer = backend thread */
+static _Atomic unsigned  in_tail;   /* consumer = dispatcher     */
 
 static void in_push(uint8_t kind, uint8_t arg)
 {
@@ -65,40 +66,23 @@ static void in_push(uint8_t kind, uint8_t arg)
     atomic_store_explicit(&in_head, h + 1, memory_order_release);
 }
 
-/* ---- bt-client inbound handlers: run on the PUMP pthread, ring-only ---- */
+/* ---- inbound handlers: invoked by the backend, possibly off-thread ---- */
 
-static enum pt_op map_pt(const char *op)
+static void on_remote_key(enum bt_remote_key key, bool pressed)
 {
-    if (!strcmp(op, Y1BT_PT_PLAY))        return PT_PLAY;
-    if (!strcmp(op, Y1BT_PT_PAUSE))       return PT_PAUSE;
-    if (!strcmp(op, Y1BT_PT_STOP))        return PT_STOP;
-    if (!strcmp(op, Y1BT_PT_NEXT))        return PT_NEXT;
-    if (!strcmp(op, Y1BT_PT_PREV))        return PT_PREV;
-    if (!strcmp(op, Y1BT_PT_FF))          return PT_FF;
-    if (!strcmp(op, Y1BT_PT_RW))          return PT_RW;
-    if (!strcmp(op, Y1BT_PT_VOLUME_UP))   return PT_VOLUP;
-    if (!strcmp(op, Y1BT_PT_VOLUME_DOWN)) return PT_VOLDN;
-    return PT_NONE;                          /* MUTE etc. ignored for now */
-}
-
-static void on_passthrough(const char *op, bool pressed)
-{
-    enum pt_op e;
     if (!pressed)                            /* act on the press, ignore release */
         return;
-    e = map_pt(op);
-    if (e != PT_NONE)
-        in_push(IN_PASSTHROUGH, (uint8_t) e);
+    in_push(IN_KEY, (uint8_t) key);
 }
 
-static void on_volume(uint8_t volume_percent)
+static void on_remote_volume(uint8_t volume_pct)
 {
-    in_push(IN_VOLUME, volume_percent);
+    in_push(IN_VOLUME, volume_pct);
 }
 
 /* ---- volume helpers (dispatcher thread) ---- */
 
-static int last_vol_sent = INT_MIN;          /* last percent we PUBLISHED to the CT */
+static int last_vol_sent = INT_MIN;          /* last percent we PUBLISHED to the sink */
 
 static int vol_to_percent(int v)
 {
@@ -120,8 +104,8 @@ static void apply_abs_volume(uint8_t percent)
     if (v > hi) v = hi;
     global_settings.volume = v;
     sound_set_volume(v);
-    /* Suppress echoing this change straight back to the CT (avoid a feedback
-     * loop), using the re-derived percent so poll_volume() sees no delta. */
+    /* Suppress echoing this change straight back (avoid a feedback loop),
+     * using the re-derived percent so poll_volume() sees no delta. */
     last_vol_sent = vol_to_percent(v);
 }
 
@@ -147,26 +131,26 @@ static void in_handle(uint8_t kind, uint8_t arg)
         apply_abs_volume(arg);
         return;
     }
-    switch (arg) {
-        case PT_PLAY:
+    switch ((enum bt_remote_key) arg) {
+        case BT_KEY_PLAY:
             if (audio_status() & AUDIO_STATUS_PAUSE)
                 audio_resume();
             break;
-        case PT_PAUSE: audio_pause(); break;
-        case PT_STOP:  audio_stop();  break;
-        case PT_NEXT:  audio_next();  break;
-        case PT_PREV:  audio_prev();  break;
-        case PT_FF:
-        case PT_RW:
+        case BT_KEY_PAUSE: audio_pause(); break;
+        case BT_KEY_STOP:  audio_stop();  break;
+        case BT_KEY_NEXT:  audio_next();  break;
+        case BT_KEY_PREV:  audio_prev();  break;
+        case BT_KEY_FF:
+        case BT_KEY_REW:
             id3 = audio_current_track();
             if (id3) {
-                pos = (long) id3->elapsed + (arg == PT_FF ? 5000 : -5000);
+                pos = (long) id3->elapsed + (arg == BT_KEY_FF ? 5000 : -5000);
                 if (pos < 0) pos = 0;
                 audio_ff_rewind(pos);
             }
             break;
-        case PT_VOLUP: step_volume(+1); break;
-        case PT_VOLDN: step_volume(-1); break;
+        case BT_KEY_VOL_UP: step_volume(+1); break;
+        case BT_KEY_VOL_DOWN: step_volume(-1); break;
         default: break;
     }
 }
@@ -187,17 +171,17 @@ static void in_drain(void)
 
 /* ---- outbound polling (dispatcher thread) ---- */
 
-static const char *last_status;
+static int last_status = -1;
 
 static void poll_status(void)
 {
     int st = audio_status();
-    const char *s = (st & AUDIO_STATUS_PAUSE) ? Y1BT_PB_PAUSED
-                  : (st & AUDIO_STATUS_PLAY)   ? Y1BT_PB_PLAYING
-                  :                              Y1BT_PB_STOPPED;
-    if (s != last_status) {
+    enum bt_playback_status s = (st & AUDIO_STATUS_PAUSE) ? BT_PB_PAUSED
+                              : (st & AUDIO_STATUS_PLAY)   ? BT_PB_PLAYING
+                              :                              BT_PB_STOPPED;
+    if ((int) s != last_status) {
         last_status = s;
-        bt_client_set_playback_status(s);
+        bt_backend_playback_status(s);
     }
 }
 
@@ -206,7 +190,7 @@ static void poll_volume(void)
     int pct = vol_to_percent(global_settings.volume);
     if (pct != last_vol_sent) {
         last_vol_sent = pct;
-        bt_client_set_volume((uint8_t) pct);
+        bt_backend_volume((uint8_t) pct);
     }
 }
 
@@ -217,7 +201,7 @@ static void poll_position(void)
         return;
     id3 = audio_current_track();
     if (id3)
-        bt_client_set_position((uint32_t) id3->elapsed);
+        bt_backend_position((uint32_t) id3->elapsed);
 }
 
 static int last_batt = -1;
@@ -235,7 +219,7 @@ static void poll_battery(void)
         return;
     last_batt = pct;
     last_chg  = chg;
-    bt_client_set_battery((uint8_t)(pct < 0 ? 0 : pct), chg != 0);
+    bt_backend_battery((uint8_t)(pct < 0 ? 0 : pct), chg != 0);
 }
 
 /* ---- now-playing (playback thread, via app events) ---- */
@@ -248,18 +232,18 @@ static void on_track(unsigned short id, void *data)
     if (!te || !te->id3)
         return;
     e = te->id3;
-    bt_client_set_now_playing(e->title        ? e->title        : "",
-                              e->artist       ? e->artist       : "",
-                              e->album        ? e->album        : "",
-                              e->genre_string ? e->genre_string : "",
-                              (uint32_t) e->tracknum,
-                              0,                       /* num_tracks: unknown */
-                              (uint32_t) e->length,
-                              e->path);
+    bt_backend_now_playing(e->title        ? e->title        : "",
+                           e->artist       ? e->artist       : "",
+                           e->album        ? e->album        : "",
+                           e->genre_string ? e->genre_string : "",
+                           (uint32_t) e->tracknum,
+                           0,                       /* num_tracks: unknown */
+                           (uint32_t) e->length,
+                           e->path);
     /* A fresh track means we're playing; nudge status + position now. */
-    last_status = Y1BT_PB_PLAYING;
-    bt_client_set_playback_status(Y1BT_PB_PLAYING);
-    bt_client_set_position(0);
+    last_status = BT_PB_PLAYING;
+    bt_backend_playback_status(BT_PB_PLAYING);
+    bt_backend_position(0);
 }
 
 /* ---- dispatcher thread ---- */
@@ -276,9 +260,8 @@ static void btav_thread(void)
         sleep(HZ / 20);                      /* ~50 ms */
 
         if (!started) {
-            /* The daemon's PCM ring may not exist yet at boot; retry until it
-             * does, which also spawns the bt-client pump for inbound events. */
-            if (bt_client_start() != 0)
+            /* The transport may not be up at boot; retry until it is. */
+            if (!bt_backend_start())
                 continue;
             started = true;
         }
@@ -298,9 +281,9 @@ void bluetooth_avrcp_init(void)
         return;
     inited = true;
 
-    /* Register inbound handlers BEFORE the pump starts so no event is missed. */
-    bt_client_set_passthrough_handler(on_passthrough);
-    bt_client_set_volume_handler(on_volume);
+    /* Register inbound handlers BEFORE the transport starts so no event is
+     * missed once it connects. */
+    bt_backend_set_remote_handlers(on_remote_key, on_remote_volume);
 
     add_event(PLAYBACK_EVENT_TRACK_CHANGE, on_track);
     add_event(PLAYBACK_EVENT_CUR_TRACK_READY, on_track);
