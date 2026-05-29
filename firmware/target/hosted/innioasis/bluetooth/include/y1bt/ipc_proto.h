@@ -13,8 +13,8 @@
 #include <stdint.h>
 #include <stdatomic.h>
 
-/* Persistent state (link keys, NVRAM, config, art cache) lives under
- * /storage/sdcard1/.btd/ — the internal SD, FAT32, mounted into the
+/* Persistent state (config, NVRAM seed, art cache, link-key backup) lives
+ * under /storage/sdcard1/.btd/ — the internal SD, FAT32, mounted into the
  * Rockbox chroot at the same path. Survives SYSTEM reflash; debuggable
  * by pulling the card.
  *
@@ -25,7 +25,9 @@
  * cover-art transfer buffers, NVRAM seed).  Daemon accesses these via
  * short-lived open/read/close cycles only -- any persistent fd here would
  * block Rockbox's USB-MSC `umount(SD)`.  Long-lived fds go in
- * Y1BT_PERSIST_DIR on SYSTEM ext4 instead (link-key DB, HCI dump). */
+ * Y1BT_PERSIST_DIR on SYSTEM ext4 instead (link-key DB, HCI dump); the
+ * link-key DB is mirrored to the SD (see link_key_store.c) so pairings
+ * survive a SYSTEM reflash even though ext4 doesn't. */
 #define Y1BT_STATE_DIR        "/storage/sdcard1/.btd"
 #define Y1BT_PERSIST_DIR      "/var/lib/y1bt"
 #define Y1BT_CTRL_SOCK_PATH   "/tmp/y1btd.sock"
