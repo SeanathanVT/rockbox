@@ -16,7 +16,7 @@
  *
  *   Outbound: now-playing fires from playback events (on the playback thread);
  *   status / position / volume / battery are polled by a dedicated dispatcher
- *   thread (the audio_*/sound_* APIs must run on a Rockbox thread).
+ *   thread (the audio_* / sound_* APIs must run on a Rockbox thread).
  *
  *   Inbound: the backend may deliver keys / volume from its own thread, so its
  *   handlers only push onto a lock-free SPSC ring; the dispatcher drains it and
@@ -102,7 +102,7 @@ static void apply_abs_volume(uint8_t percent)
     int v  = lo + ((int) percent * (hi - lo) + 50) / 100;
     if (v < lo) v = lo;
     if (v > hi) v = hi;
-    global_settings.volume = v;
+    global_status.volume = v;
     sound_set_volume(v);
     /* Suppress echoing this change straight back (avoid a feedback loop),
      * using the re-derived percent so poll_volume() sees no delta. */
@@ -113,10 +113,10 @@ static void step_volume(int delta)
 {
     int lo = sound_min(SOUND_VOLUME);
     int hi = sound_max(SOUND_VOLUME);
-    int v  = global_settings.volume + delta;
+    int v  = global_status.volume + delta;
     if (v < lo) v = lo;
     if (v > hi) v = hi;
-    global_settings.volume = v;
+    global_status.volume = v;
     sound_set_volume(v);
 }
 
@@ -187,7 +187,7 @@ static void poll_status(void)
 
 static void poll_volume(void)
 {
-    int pct = vol_to_percent(global_settings.volume);
+    int pct = vol_to_percent(global_status.volume);
     if (pct != last_vol_sent) {
         last_vol_sent = pct;
         bt_backend_volume((uint8_t) pct);
