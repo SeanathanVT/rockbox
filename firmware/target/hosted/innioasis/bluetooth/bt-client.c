@@ -160,6 +160,15 @@ static void dispatch_event(const char *line, int len) {
         find_str(line, len, "addr",    addr,  sizeof(addr));
         find_str(line, len, "profile", prof,  sizeof(prof));
         find_str(line, len, "state",   state, sizeof(state));
+        /* Automatic output routing (phone-like): the A2DP stream coming up or
+         * going down switches output to/from Bluetooth.  pcm-y1mtk reads this
+         * flag and falls back to headphones/speaker (by jack) when it's off. */
+        if (!strcmp(prof, "a2dp")) {
+            if (!strcmp(state, "connected"))
+                atomic_store(&bt_is_output_atomic, true);
+            else if (!strcmp(state, "disconnected"))
+                atomic_store(&bt_is_output_atomic, false);
+        }
         if (cb_conn) cb_conn(addr, prof, state);
 
     } else if (!strcmp(ev, Y1BT_EVENT_NOW_PLAYING_IN)) {

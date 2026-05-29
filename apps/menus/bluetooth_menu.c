@@ -150,20 +150,14 @@ static int bt_scan_screen(void)
     return 0;
 }
 
-static int bt_output_toggle(void)
-{
-    bool now = !bt_client_is_output();
-    bt_client_set_output(now);
-    splashf(HZ, "Output: %s", now ? "Bluetooth" : "Speaker");
-    return 0;
-}
-
+/* Output routing is automatic now: the bt-client pump flips output to BT when
+ * the A2DP stream comes up and back to headphones/speaker when it drops, so the
+ * old manual "Output (toggle)" item is gone.  The full device-management menu
+ * (connect/disconnect/forget + BT on/off) replaces this scaffold. */
 MENUITEM_FUNCTION(bt_scan_item,    0, "Scan for devices",
                   bt_scan_screen,    NULL, Icon_NOICON);
-MENUITEM_FUNCTION(bt_output_item,  0, "Output (toggle)",
-                  bt_output_toggle,  NULL, Icon_NOICON);
 
 MAKE_MENU(bluetooth_menu, "Bluetooth", NULL, Icon_NOICON,
-          &bt_scan_item, &bt_output_item);
+          &bt_scan_item);
 
 #endif /* HAVE_BLUETOOTH */
