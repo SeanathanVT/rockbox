@@ -6,10 +6,12 @@
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
  *
- * Innioasis Y1 backend for the shared AVRCP glue.  Binds the device-agnostic
- * bt_backend_* interface (firmware/export/bluetooth_backend.h) to the y1-btd
- * client (bt-client.c): translates the generic key/status enums to/from the
- * y1-btd IPC wire constants.  All Y1-/y1-btd-specific knowledge lives here.
+ * Innioasis Y1 backend for the shared Bluetooth layer.  Binds the
+ * device-agnostic bt_backend_* interface (firmware/export/bluetooth_backend.h)
+ * to the y1-btd client (bt-client.c): AVRCP publish + remote control (mapping
+ * the generic key/status enums to/from the y1-btd IPC wire constants) and the
+ * device discovery/management surface used by the Bluetooth menu.  All Y1-/
+ * y1-btd-specific knowledge lives here.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -110,3 +112,67 @@ void bt_backend_battery(uint8_t percent, bool charging)
 {
     bt_client_set_battery(percent, charging);
 }
+
+/* ---- device discovery / management ---- */
+
+static const struct bt_device_observer *s_obs;
+
+/* bt-client pump-thread callbacks -> observer.  The connection callback's
+ * addr/profile/state are dropped: the menu re-queries the authoritative list. */
+static void inq_result_cb(const char *addr, const char *name,
+                          uint32_t cod, int8_t rssi)
+{
+    if (s_obs && s_obs->scan_result)
+        s_obs->scan_result(addr, name, cod, rssi);
+}
+static void inq_complete_cb(void)
+{
+    if (s_obs && s_obs->scan_complete)
+        s_obs->scan_complete();
+}
+static void paired_begin_cb(void)
+{
+    if (s_obs && s_obs->paired_begin)
+        s_obs->paired_begin();
+}
+static void paired_device_cb(const char *addr, const char *name, bool connected)
+{
+    if (s_obs && s_obs->paired_device)
+        s_obs->paired_device(addr, name, connected);
+}
+static void paired_done_cb(void)
+{
+    if (s_obs && s_obs->paired_done)
+        s_obs->paired_done();
+}
+static void connection_cb(const char *addr, const char *profile, const char *state)
+{
+    (void) addr; (void) profile; (void) state;
+    if (s_obs && s_obs->connection_changed)
+        s_obs->connection_changed();
+}
+
+void bt_backend_set_device_observer(const struct bt_device_observer *obs)
+{
+    s_obs = obs;
+    if (obs) {
+        bt_client_set_inquiry_result_handler(inq_result_cb);
+        bt_client_set_inquiry_complete_handler(inq_complete_cb);
+        bt_client_set_paired_handler(paired_begin_cb, paired_device_cb, paired_done_cb);
+        bt_client_set_connection_handler(connection_cb);
+    } else {
+        bt_client_set_inquiry_result_handler(NULL);
+        bt_client_set_inquiry_complete_handler(NULL);
+        bt_client_set_paired_handler(NULL, NULL, NULL);
+        bt_client_set_connection_handler(NULL);
+    }
+}
+
+void bt_backend_set_enabled(bool enabled)      { bt_client_set_enabled(enabled); }
+void bt_backend_request_devices(void)          { bt_client_request_devices(); }
+void bt_backend_scan_start(uint16_t duration_s){ bt_client_start_inquiry(duration_s); }
+void bt_backend_scan_stop(void)                { bt_client_cancel_inquiry(); }
+void bt_backend_connect(const char *addr)      { bt_client_connect_device(addr); }
+void bt_backend_disconnect(const char *addr)   { bt_client_disconnect_device(addr); }
+void bt_backend_pair(const char *addr)         { bt_client_pair_device(addr); }
+void bt_backend_forget(const char *addr)       { bt_client_forget_device(addr); }

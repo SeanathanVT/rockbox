@@ -4,11 +4,10 @@
  * One scrollable screen: a Bluetooth on/off toggle, the paired ("My Devices")
  * list with connect/disconnect (OK) and forget (long-press/context), and the
  * "Available Devices" list with a scan control and pair-on-select.  Talks to
- * the platform's Bluetooth daemon via the bt-client library; its pump thread
- * pushes inquiry results, the paired-device list (reply to list_devices), and
- * connection-state changes into mutex-protected tables that the list redraws
- * off a timer.  (Device control here is not yet behind the abstract
- * bluetooth_backend interface that bluetooth_avrcp.c uses.)
+ * the platform's Bluetooth stack through the abstract bluetooth_backend
+ * interface; the backend pushes inquiry results, the paired-device list, and
+ * connection changes (via bt_device_observer) into mutex-protected tables that
+ * the list redraws off a timer.
  */
 #include "config.h"
 
@@ -27,7 +26,7 @@
 #include "menu.h"
 #include "splash.h"
 
-#include "bluetooth/bt-client.h"
+#include "bluetooth_backend.h"
 #include "exported_menus.h"
 
 #define MAX_PAIRED       16
@@ -56,7 +55,7 @@ struct row { uint8_t type; int idx; };
 static struct row rows[2 + MAX_PAIRED + 2 + MAX_AVAIL];
 static int        rows_n;
 
-/* ---- daemon push handlers (run on the bt-client pump thread) ---- */
+/* ---- backend observer callbacks (may run on a backend thread) ---- */
 
 static void on_inquiry_result(const char *addr, const char *name,
                               uint32_t cod, int8_t rssi)
@@ -112,14 +111,21 @@ static void on_paired_done(void)
 }
 
 /* A connect/disconnect happened -- re-fetch the authoritative paired list
- * (its connected flags come from the daemon's device registry). */
-static void on_connection(const char *addr, const char *profile,
-                          const char *state)
+ * (its connected flags come from the backend). */
+static void on_connection_changed(void)
 {
-    (void) addr; (void) profile; (void) state;
-    bt_client_request_devices();
+    bt_backend_request_devices();
     atomic_fetch_add(&dirty, 1);
 }
+
+static const struct bt_device_observer menu_observer = {
+    .scan_result        = on_inquiry_result,
+    .scan_complete      = on_inquiry_complete,
+    .paired_begin       = on_paired_begin,
+    .paired_device      = on_paired_device,
+    .paired_done        = on_paired_done,
+    .connection_changed = on_connection_changed,
+};
 
 /* ---- list rendering (UI thread) ---- */
 
@@ -192,9 +198,9 @@ static const char *get_name(int sel, void *data, char *buf, size_t buf_sz)
 static void toggle_bluetooth(void)
 {
     bt_enabled = !bt_enabled;
-    bt_client_set_enabled(bt_enabled);
+    bt_backend_set_enabled(bt_enabled);
     if (bt_enabled) {
-        bt_client_request_devices();
+        bt_backend_request_devices();
     } else {
         pthread_mutex_lock(&mtx);
         paired_n = 0; avail_n = 0; scanning = false;
@@ -206,13 +212,13 @@ static void toggle_bluetooth(void)
 static void toggle_scan(void)
 {
     if (scanning) {
-        bt_client_cancel_inquiry();
+        bt_backend_scan_stop();
         scanning = false;
     } else {
         pthread_mutex_lock(&mtx);
         avail_n = 0;
         pthread_mutex_unlock(&mtx);
-        bt_client_start_inquiry(SCAN_DURATION_S);
+        bt_backend_scan_start(SCAN_DURATION_S);
         scanning = true;
     }
     atomic_fetch_add(&dirty, 1);
@@ -252,10 +258,10 @@ static int action_cb(int action, struct gui_synclist *lists)
         case R_PAIRED:
             if (!addr[0]) break;
             if (was_connected) {
-                bt_client_disconnect_device(addr);
+                bt_backend_disconnect(addr);
             } else {
                 splashf(HZ, "Connecting %s", addr);
-                bt_client_connect_device(addr);
+                bt_backend_connect(addr);
             }
             break;
         case R_SCANCTL:
@@ -264,7 +270,7 @@ static int action_cb(int action, struct gui_synclist *lists)
         case R_AVAIL:
             if (addr[0]) {
                 splashf(HZ, "Pairing %s", addr);
-                bt_client_pair_device(addr);
+                bt_backend_pair(addr);
             }
             break;
         default:
@@ -283,9 +289,9 @@ static int action_cb(int action, struct gui_synclist *lists)
         }
         pthread_mutex_unlock(&mtx);
         if (addr[0]) {
-            bt_client_forget_device(addr);
+            bt_backend_forget(addr);
             splashf(HZ, "Forgot %s", name);
-            bt_client_request_devices();
+            bt_backend_request_devices();
             atomic_fetch_add(&dirty, 1);
         }
         return ACTION_REDRAW;
@@ -296,8 +302,8 @@ static int action_cb(int action, struct gui_synclist *lists)
 
 static int bt_main_screen(void)
 {
-    if (bt_client_start() < 0) {
-        splashf(HZ * 2, "Bluetooth daemon not running");
+    if (!bt_backend_start()) {
+        splashf(HZ * 2, "Bluetooth not available");
         return 0;
     }
     pthread_mutex_lock(&mtx);
@@ -305,11 +311,8 @@ static int bt_main_screen(void)
     pthread_mutex_unlock(&mtx);
     atomic_store(&dirty, 0);
 
-    bt_client_set_inquiry_result_handler(on_inquiry_result);
-    bt_client_set_inquiry_complete_handler(on_inquiry_complete);
-    bt_client_set_paired_handler(on_paired_begin, on_paired_device, on_paired_done);
-    bt_client_set_connection_handler(on_connection);
-    if (bt_enabled) bt_client_request_devices();
+    bt_backend_set_device_observer(&menu_observer);
+    if (bt_enabled) bt_backend_request_devices();
 
     build_rows();
 
@@ -320,12 +323,10 @@ static int bt_main_screen(void)
     info.timeout         = HZ / 2;
     simplelist_show_list(&info);
 
-    if (scanning) { bt_client_cancel_inquiry(); scanning = false; }
-    bt_client_set_inquiry_result_handler(NULL);
-    bt_client_set_inquiry_complete_handler(NULL);
-    bt_client_set_paired_handler(NULL, NULL, NULL);
-    bt_client_set_connection_handler(NULL);   /* auto-route handler is internal
-                                                 to bt-client, unaffected */
+    if (scanning) { bt_backend_scan_stop(); scanning = false; }
+    bt_backend_set_device_observer(NULL);     /* automatic output routing is
+                                                 internal to the backend and
+                                                 stays active */
     return 0;
 }
 
