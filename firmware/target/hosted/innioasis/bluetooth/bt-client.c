@@ -96,11 +96,23 @@ static bool find_str(const char *line, int len, const char *key,
     const char *p = memmem(line, len, pat, (size_t) n);
     if (!p) return false;
     p += n;
-    const char *end = memchr(p, '"', (size_t)(line + len - p));
-    if (!end) return false;
-    size_t flen = (size_t)(end - p);
-    if (flen >= out_sz) flen = out_sz - 1;
-    memcpy(out, p, flen); out[flen] = '\0';
+    const char *lend = line + len;
+    /* Walk the value, honoring JSON backslash escapes (only \" and \\
+     * matter for our daemon-emitted values; other escapes get passed
+     * through verbatim).  Stop at the FIRST unescaped double-quote. */
+    size_t oi = 0;
+    while (p < lend && *p != '"') {
+        char c;
+        if (*p == '\\' && p + 1 < lend) {
+            p++;                 /* skip backslash */
+            c = *p++;            /* take escaped char as-is */
+        } else {
+            c = *p++;
+        }
+        if (oi + 1 < out_sz) out[oi++] = c;
+    }
+    if (p >= lend) return false;
+    out[oi] = '\0';
     return true;
 }
 
