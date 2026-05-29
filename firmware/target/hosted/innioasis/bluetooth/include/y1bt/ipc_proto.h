@@ -13,14 +13,17 @@
 #include <stdint.h>
 #include <stdatomic.h>
 
-/* All persistent state lives under /storage/sdcard1/.btd/ (the internal SD,
- * mounted into the Rockbox chroot at the same path). Survives SYSTEM
- * reflash; debuggable by pulling the card. The Y1 has no /var, /etc, or
- * /dev/shm pre-set — putting everything on SD avoids needing tmpfs mounts
- * for first-light. */
+/* Persistent state (link keys, NVRAM, config, art cache) lives under
+ * /storage/sdcard1/.btd/ — the internal SD, FAT32, mounted into the
+ * Rockbox chroot at the same path. Survives SYSTEM reflash; debuggable
+ * by pulling the card.
+ *
+ * Volatile runtime state (UNIX socket, PCM ring) lives on the SYSTEM
+ * ext4 — FAT32 cannot host special-file types like AF_UNIX sockets, so
+ * the IPC socket MUST be on ext4. /tmp/ exists inside the chroot. */
 #define Y1BT_STATE_DIR        "/storage/sdcard1/.btd"
-#define Y1BT_CTRL_SOCK_PATH   "/storage/sdcard1/.btd/sock"
-#define Y1BT_PCM_RING_PATH    "/storage/sdcard1/.btd/pcm"
+#define Y1BT_CTRL_SOCK_PATH   "/tmp/y1btd.sock"
+#define Y1BT_PCM_RING_PATH    "/tmp/y1btd-pcm"
 #define Y1BT_ART_IN_DIR       "/storage/sdcard1/.btd/art-in"
 #define Y1BT_ART_OUT_DIR      "/storage/sdcard1/.btd/art-out"
 #define Y1BT_CONFIG_PATH      "/storage/sdcard1/.btd/y1bt.conf"
