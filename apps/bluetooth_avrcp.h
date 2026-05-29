@@ -7,8 +7,9 @@
  *                     \/            \/     \/    \/            \/
  *
  * AVRCP glue: publishes Rockbox playback state (now-playing, status,
- * position, volume, battery) to the y1-btd daemon, and applies inbound
- * passthrough keys + absolute volume from the connected Controller.
+ * position, volume, battery) to a connected Bluetooth sink, and applies
+ * inbound remote-control keys + absolute volume from it.  Transport is
+ * abstracted behind <bluetooth_backend.h>, which each target implements.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License

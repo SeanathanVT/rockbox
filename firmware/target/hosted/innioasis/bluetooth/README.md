@@ -7,6 +7,7 @@ Rockbox-side glue for the `y1-btd` Bluetooth daemon.  Daemon source + architectu
 | File | Role |
 |---|---|
 | `bt-client.h` / `bt-client.c` | UNIX-socket + shm-ring client.  Provides the API Rockbox calls into. |
+| `bt-avrcp-backend.c` | Implements the device-agnostic `bt_backend_*` interface (`firmware/export/bluetooth_backend.h`) over `bt-client`, translating the generic key/status enums ↔ `Y1BT_*` wire constants.  The shared AVRCP glue (`apps/bluetooth_avrcp.c`) talks only to that interface, never to this target. |
 | `include/y1bt/ipc_proto.h` | Wire-format header.  Vendored copy of the daemon's version — **keep byte-identical**. |
 
 When the protocol changes (new ops, ring layout), update both copies and bump `Y1BT_PCM_VERSION` in `ipc_proto.h` if the shm ring shape moves.

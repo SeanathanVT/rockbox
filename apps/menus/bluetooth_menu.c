@@ -4,9 +4,11 @@
  * One scrollable screen: a Bluetooth on/off toggle, the paired ("My Devices")
  * list with connect/disconnect (OK) and forget (long-press/context), and the
  * "Available Devices" list with a scan control and pair-on-select.  Talks to
- * y1-btd via the bt-client library; the daemon's pump thread pushes inquiry
- * results, the paired-device list (reply to list_devices), and connection-state
- * changes into mutex-protected tables that the list redraws off a timer.
+ * the platform's Bluetooth daemon via the bt-client library; its pump thread
+ * pushes inquiry results, the paired-device list (reply to list_devices), and
+ * connection-state changes into mutex-protected tables that the list redraws
+ * off a timer.  (Device control here is not yet behind the abstract
+ * bluetooth_backend interface that bluetooth_avrcp.c uses.)
  */
 #include "config.h"
 

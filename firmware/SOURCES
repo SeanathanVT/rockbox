@@ -229,6 +229,7 @@ target/hosted/innioasis/pcm-y1mtk.c
 #endif
 #ifdef HAVE_BLUETOOTH
 target/hosted/innioasis/bluetooth/bt-client.c
+target/hosted/innioasis/bluetooth/bt-avrcp-backend.c
 #endif
 #endif
 
