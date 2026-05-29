@@ -73,4 +73,31 @@ void bt_backend_position(uint32_t position_ms);
 void bt_backend_volume(uint8_t volume_pct);
 void bt_backend_battery(uint8_t percent, bool charging);
 
+/* ---- device discovery / management (used by the Bluetooth settings menu) ----
+ *
+ * Notifications from the backend.  May fire from the backend's own thread, so
+ * handlers must be cheap and thread-safe.  `cod` is the Bluetooth Class of
+ * Device (spec-defined); `rssi` is in dBm. */
+struct bt_device_observer {
+    void (*scan_result)(const char *addr, const char *name,
+                        uint32_t cod, int8_t rssi);
+    void (*scan_complete)(void);
+    void (*paired_begin)(void);
+    void (*paired_device)(const char *addr, const char *name, bool connected);
+    void (*paired_done)(void);
+    void (*connection_changed)(void);   /* a device connected/disconnected; re-query */
+};
+
+/* Register the observer for device events, or clear it with NULL. */
+void bt_backend_set_device_observer(const struct bt_device_observer *obs);
+
+void bt_backend_set_enabled(bool enabled);          /* radio power on/off */
+void bt_backend_request_devices(void);              /* -> paired_* callbacks */
+void bt_backend_scan_start(uint16_t duration_s);    /* -> scan_result/scan_complete */
+void bt_backend_scan_stop(void);
+void bt_backend_connect(const char *addr);
+void bt_backend_disconnect(const char *addr);
+void bt_backend_pair(const char *addr);
+void bt_backend_forget(const char *addr);
+
 #endif /* _BLUETOOTH_BACKEND_H */
