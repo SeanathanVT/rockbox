@@ -144,3 +144,8 @@
 /* USB (from android_usb/idVendor / idProduct) */
 #define USB_VID_STR "0BB4"
 #define USB_PID_STR "0C03"
+
+/* Bluetooth: y1-btd daemon handles HCI + profiles.  Rockbox links the
+ * client library to drive scan/pair/connect from the Settings UI and
+ * (later) mirror PCM to the daemon's shared-memory ring for A2DP. */
+#define HAVE_BLUETOOTH

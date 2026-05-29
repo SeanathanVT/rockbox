@@ -21,14 +21,19 @@
  * Volatile runtime state (UNIX socket, PCM ring) lives on the SYSTEM
  * ext4 — FAT32 cannot host special-file types like AF_UNIX sockets, so
  * the IPC socket MUST be on ext4. /tmp/ exists inside the chroot. */
+/* Y1BT_STATE_DIR is on the SD card and holds user-visible state (config,
+ * cover-art transfer buffers, NVRAM seed).  Daemon accesses these via
+ * short-lived open/read/close cycles only -- any persistent fd here would
+ * block Rockbox's USB-MSC `umount(SD)`.  Long-lived fds go in
+ * Y1BT_PERSIST_DIR on SYSTEM ext4 instead (link-key DB, HCI dump). */
 #define Y1BT_STATE_DIR        "/storage/sdcard1/.btd"
+#define Y1BT_PERSIST_DIR      "/var/lib/y1bt"
 #define Y1BT_CTRL_SOCK_PATH   "/tmp/y1btd.sock"
 #define Y1BT_PCM_RING_PATH    "/tmp/y1btd-pcm"
-#define Y1BT_ART_IN_DIR       "/storage/sdcard1/.btd/art-in"
-#define Y1BT_ART_OUT_DIR      "/storage/sdcard1/.btd/art-out"
-#define Y1BT_CONFIG_PATH      "/storage/sdcard1/.btd/y1bt.conf"
-#define Y1BT_NVRAM_PATH       "/storage/sdcard1/.btd/btnvram.bin"
-#define Y1BT_LOG_PATH         "/storage/sdcard1/Y1_btd.log"
+#define Y1BT_ART_IN_DIR       Y1BT_STATE_DIR   "/art-in"
+#define Y1BT_ART_OUT_DIR      Y1BT_STATE_DIR   "/art-out"
+#define Y1BT_CONFIG_PATH      Y1BT_STATE_DIR   "/y1bt.conf"
+#define Y1BT_NVRAM_PATH       Y1BT_STATE_DIR   "/btnvram.bin"
 
 /* ----- PCM ring ----- */
 
@@ -72,6 +77,9 @@ struct y1bt_pcm_ring {
  * Constants below are the canonical op-name strings; both sides should use them.
  */
 
+#define Y1BT_OP_INQUIRY_START         "inquiry_start"
+#define Y1BT_OP_INQUIRY_CANCEL        "inquiry_cancel"
+#define Y1BT_OP_PAIR_DEVICE           "pair_device"
 #define Y1BT_OP_SET_NOW_PLAYING       "set_now_playing"
 #define Y1BT_OP_SET_PLAYBACK_STATUS   "set_playback_status"
 #define Y1BT_OP_SET_POSITION          "set_position"
@@ -86,6 +94,8 @@ struct y1bt_pcm_ring {
 #define Y1BT_OP_GET_STATE             "get_state"
 #define Y1BT_OP_PAIRING_CONFIRM       "pairing_confirm"
 
+#define Y1BT_EVENT_INQUIRY_RESULT     "inquiry_result"
+#define Y1BT_EVENT_INQUIRY_COMPLETE   "inquiry_complete"
 #define Y1BT_EVENT_PASSTHROUGH        "passthrough"
 #define Y1BT_EVENT_VOLUME_CHANGED     "volume_changed"
 #define Y1BT_EVENT_CONNECTION_STATE   "connection_state"

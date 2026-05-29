@@ -49,6 +49,8 @@ static bt_passthrough_handler_t       cb_pt;
 static bt_volume_handler_t            cb_vol;
 static bt_connection_handler_t        cb_conn;
 static bt_now_playing_in_handler_t    cb_np_in;
+static bt_inquiry_result_handler_t    cb_inq;
+static bt_inquiry_complete_handler_t  cb_inq_done;
 
 static void close_ctrl(void) {
     if (ctrl_fd >= 0) { close(ctrl_fd); ctrl_fd = -1; }
@@ -157,6 +159,18 @@ static void dispatch_event(const char *line, int len) {
         find_str(line, len, "art_path", art,    sizeof(art));
         find_int(line, len, "length_ms", &length_ms);
         if (cb_np_in) cb_np_in(title, artist, album, (uint32_t) length_ms, art);
+
+    } else if (!strcmp(ev, Y1BT_EVENT_INQUIRY_RESULT)) {
+        char addr[20] = {0}, name[256] = {0};
+        int64_t cod = 0, rssi = 0;
+        find_str(line, len, "addr", addr, sizeof(addr));
+        find_str(line, len, "name", name, sizeof(name));
+        find_int(line, len, "cod",  &cod);
+        find_int(line, len, "rssi", &rssi);
+        if (cb_inq) cb_inq(addr, name, (uint32_t) cod, (int8_t) rssi);
+
+    } else if (!strcmp(ev, Y1BT_EVENT_INQUIRY_COMPLETE)) {
+        if (cb_inq_done) cb_inq_done();
     }
 }
 
@@ -308,6 +322,28 @@ void bt_client_forget_device(const char *addr) {
     if (n > 0) send_op_line(buf);
 }
 
+void bt_client_start_inquiry(uint16_t duration_s) {
+    char buf[96];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"op\":\"%s\",\"p\":{\"duration_s\":%u}}\n",
+                     Y1BT_OP_INQUIRY_START, (unsigned) duration_s);
+    if (n > 0) send_op_line(buf);
+}
+
+void bt_client_cancel_inquiry(void) {
+    char buf[64];
+    int n = snprintf(buf, sizeof(buf), "{\"op\":\"%s\"}\n", Y1BT_OP_INQUIRY_CANCEL);
+    if (n > 0) send_op_line(buf);
+}
+
+void bt_client_pair_device(const char *addr) {
+    char buf[128];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"op\":\"%s\",\"p\":{\"addr\":\"%s\"}}\n",
+                     Y1BT_OP_PAIR_DEVICE, addr ? addr : "");
+    if (n > 0) send_op_line(buf);
+}
+
 size_t bt_client_pcm_write(const int16_t *samples, size_t frames) {
     if (!ring || !samples || !frames) return 0;
     uint32_t cap = ring->capacity_frames;
@@ -335,6 +371,8 @@ void bt_client_set_passthrough_handler(bt_passthrough_handler_t h)     { cb_pt  
 void bt_client_set_volume_handler(bt_volume_handler_t h)               { cb_vol  = h; }
 void bt_client_set_connection_handler(bt_connection_handler_t h)       { cb_conn = h; }
 void bt_client_set_now_playing_in_handler(bt_now_playing_in_handler_t h){cb_np_in= h; }
+void bt_client_set_inquiry_result_handler(bt_inquiry_result_handler_t h)   { cb_inq      = h; }
+void bt_client_set_inquiry_complete_handler(bt_inquiry_complete_handler_t h){cb_inq_done = h; }
 
 void bt_client_pump(void) {
     /* If threaded pump is running, no-op. Otherwise a single non-blocking
