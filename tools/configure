@@ -4875,6 +4875,13 @@ if test -n "$t_cpu"; then
       extradefines="$extradefines -DUSE_TINYALSA"
   fi
 
+  # Innioasis Y1: bluetooth/include holds the y1bt/ IPC header shared with
+  # the y1-btd daemon.  Put it on the search path so bt-client.c and
+  # apps/menus/bluetooth_menu.c can `#include <y1bt/ipc_proto.h>`.
+  if [ "$modelname" = "innioasisy1" ]; then
+      TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/hosted/innioasis/bluetooth/include"
+  fi
+
   TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/$t_cpu/$t_manufacturer"
   test -n "$t_soc" && TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/$t_cpu/$t_soc"
   TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/$t_cpu"

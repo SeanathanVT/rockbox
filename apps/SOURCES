@@ -42,6 +42,9 @@ menus/sound_menu.c
 #if CONFIG_RTC
 menus/time_menu.c
 #endif
+#ifdef HAVE_BLUETOOTH
+menus/bluetooth_menu.c
+#endif
 misc.c
 open_plugin.c
 onplay.c

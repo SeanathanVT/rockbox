@@ -227,6 +227,9 @@ target/hosted/innioasis/usb-y1.c
 #if !defined(BOOTLOADER)
 target/hosted/innioasis/pcm-y1mtk.c
 #endif
+#ifdef HAVE_BLUETOOTH
+target/hosted/innioasis/bluetooth/bt-client.c
+#endif
 #endif
 
 #if (defined(XDUOO_X3II) || defined(XDUOO_X20)) && !defined(SIMULATOR)

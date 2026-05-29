@@ -44,6 +44,11 @@ void bt_client_connect_device(const char *bd_addr);
 void bt_client_disconnect_device(const char *bd_addr);
 void bt_client_forget_device(const char *bd_addr);
 
+/* Outbound device discovery for the "Scan for devices" UI. */
+void bt_client_start_inquiry(uint16_t duration_s);
+void bt_client_cancel_inquiry(void);
+void bt_client_pair_device(const char *bd_addr);
+
 /* PCM mirror: call from pcm-y1mtk.c's write loop when BT output is selected.
  * Writes up to `frames` interleaved stereo S16LE frames into the shared ring;
  * returns frames consumed (may be < frames if the ring is full, in which case
@@ -63,11 +68,18 @@ typedef void (*bt_now_playing_in_handler_t)(const char *title,
                                               const char *album,
                                               uint32_t length_ms,
                                               const char *art_path);
+typedef void (*bt_inquiry_result_handler_t)(const char *addr,
+                                              const char *name,
+                                              uint32_t cod,
+                                              int8_t rssi);
+typedef void (*bt_inquiry_complete_handler_t)(void);
 
 void bt_client_set_passthrough_handler(bt_passthrough_handler_t h);
 void bt_client_set_volume_handler(bt_volume_handler_t h);
 void bt_client_set_connection_handler(bt_connection_handler_t h);
 void bt_client_set_now_playing_in_handler(bt_now_playing_in_handler_t h);
+void bt_client_set_inquiry_result_handler(bt_inquiry_result_handler_t h);
+void bt_client_set_inquiry_complete_handler(bt_inquiry_complete_handler_t h);
 
 /* The client lib runs its IPC pump from a dedicated pthread. If the host
  * prefers single-threaded service, call this periodically instead and pass

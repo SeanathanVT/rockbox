@@ -518,6 +518,9 @@ MAKE_MENU(main_menu_, ID2P(LANG_SETTINGS), NULL,
 #if CONFIG_RTC
         &timedate_item,
 #endif
+#ifdef HAVE_BLUETOOTH
+        &bluetooth_menu,
+#endif
         &main_menu_config_item,
         &manage_settings,
         );
