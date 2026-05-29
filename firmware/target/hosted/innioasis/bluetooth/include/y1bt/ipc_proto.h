@@ -93,6 +93,7 @@ struct y1bt_pcm_ring {
 #define Y1BT_OP_LIST_DEVICES          "list_devices"
 #define Y1BT_OP_GET_STATE             "get_state"
 #define Y1BT_OP_PAIRING_CONFIRM       "pairing_confirm"
+#define Y1BT_OP_SET_ENABLED           "set_enabled"   /* radio power on/off */
 
 #define Y1BT_EVENT_INQUIRY_RESULT     "inquiry_result"
 #define Y1BT_EVENT_INQUIRY_COMPLETE   "inquiry_complete"

@@ -51,6 +51,9 @@ static bt_connection_handler_t        cb_conn;
 static bt_now_playing_in_handler_t    cb_np_in;
 static bt_inquiry_result_handler_t    cb_inq;
 static bt_inquiry_complete_handler_t  cb_inq_done;
+static void                          (*cb_paired_begin)(void);
+static bt_paired_device_handler_t     cb_paired_dev;
+static void                          (*cb_paired_done)(void);
 
 static void close_ctrl(void) {
     if (ctrl_fd >= 0) { close(ctrl_fd); ctrl_fd = -1; }
@@ -69,6 +72,7 @@ static int connect_ctrl(void) {
 }
 
 static int open_ring(void) {
+    if (ring) return 0;                  /* already attached (idempotent start) */
     int fd = open(Y1BT_PCM_RING_PATH, O_RDWR);
     if (fd < 0) return -1;
     struct stat st;
@@ -140,9 +144,46 @@ static bool find_bool(const char *line, int len, const char *key, bool *out) {
     return false;
 }
 
+/* Parse the list_devices reply: {"ok":true,"r":{"devices":[{...},{...}]}}.
+ * Objects are flat; we find each one's closing brace while skipping braces that
+ * sit inside quoted strings (a device name may contain '}'). */
+static void parse_devices(const char *line, int len) {
+    const char *lend = line + len;
+    const char *p = memmem(line, len, "\"devices\":", 10);
+    if (!p) return;
+    if (cb_paired_begin) cb_paired_begin();
+    const char *q = p;
+    while (q < lend) {
+        const char *obj = memchr(q, '{', (size_t)(lend - q));
+        if (!obj) break;
+        const char *end = obj + 1;
+        bool inq = false;
+        while (end < lend) {
+            char c = *end;
+            if (inq) { if (c == '\\') end++; else if (c == '"') inq = false; }
+            else     { if (c == '"') inq = true; else if (c == '}') break; }
+            end++;
+        }
+        if (end >= lend) break;
+        int olen = (int)(end - obj) + 1;
+        char addr[20] = {0}, name[64] = {0};
+        bool connected = false;
+        find_str(obj, olen, "addr", addr, sizeof(addr));
+        find_str(obj, olen, "name", name, sizeof(name));
+        find_bool(obj, olen, "connected", &connected);
+        if (addr[0] && cb_paired_dev) cb_paired_dev(addr, name, connected);
+        q = end + 1;
+    }
+    if (cb_paired_done) cb_paired_done();
+}
+
 static void dispatch_event(const char *line, int len) {
     char ev[64] = {0};
-    if (!find_str(line, len, "event", ev, sizeof(ev))) return;
+    if (!find_str(line, len, "event", ev, sizeof(ev))) {
+        /* Not a push event; the only reply we consume is list_devices. */
+        if (memmem(line, len, "\"devices\":", 10)) parse_devices(line, len);
+        return;
+    }
 
     if (!strcmp(ev, Y1BT_EVENT_PASSTHROUGH)) {
         char op[16] = {0}; bool pressed = false;
@@ -355,6 +396,28 @@ void bt_client_cancel_inquiry(void) {
     char buf[64];
     int n = snprintf(buf, sizeof(buf), "{\"op\":\"%s\"}\n", Y1BT_OP_INQUIRY_CANCEL);
     if (n > 0) send_op_line(buf);
+}
+
+void bt_client_set_enabled(bool on) {
+    char buf[80];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"op\":\"%s\",\"p\":{\"enabled\":%s}}\n",
+                     Y1BT_OP_SET_ENABLED, on ? "true" : "false");
+    if (n > 0) send_op_line(buf);
+}
+
+void bt_client_request_devices(void) {
+    char buf[64];
+    int n = snprintf(buf, sizeof(buf), "{\"op\":\"%s\"}\n", Y1BT_OP_LIST_DEVICES);
+    if (n > 0) send_op_line(buf);
+}
+
+void bt_client_set_paired_handler(void (*begin)(void),
+                                  bt_paired_device_handler_t device,
+                                  void (*done)(void)) {
+    cb_paired_begin = begin;
+    cb_paired_dev   = device;
+    cb_paired_done  = done;
 }
 
 void bt_client_pair_device(const char *addr) {
