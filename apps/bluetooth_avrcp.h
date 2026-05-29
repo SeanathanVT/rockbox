@@ -20,8 +20,8 @@
 #define _BLUETOOTH_AVRCP_H
 
 /* Start the AVRCP glue: register playback-event + inbound handlers and spawn
- * the dispatcher thread (which also brings up the bt-client). Idempotent;
- * call once from app init. */
+ * the dispatcher thread (which also brings up the backend transport).
+ * Idempotent; call once from app init. */
 void bluetooth_avrcp_init(void);
 
 #endif /* _BLUETOOTH_AVRCP_H */
