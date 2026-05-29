@@ -44,6 +44,7 @@ menus/time_menu.c
 #endif
 #ifdef HAVE_BLUETOOTH
 menus/bluetooth_menu.c
+bluetooth_avrcp.c
 #endif
 misc.c
 open_plugin.c

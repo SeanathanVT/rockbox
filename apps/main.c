@@ -61,6 +61,9 @@
 #include "power.h"
 #include "talk.h"
 #include "plugin.h"
+#ifdef HAVE_BLUETOOTH
+#include "bluetooth_avrcp.h"
+#endif
 #include "misc.h"
 #include "dircache.h"
 #ifdef HAVE_TAGCACHE
@@ -465,6 +468,9 @@ static void init(void)
     audio_init();
     talk_announce_voice_invalid(); /* notify user w/ voice prompt if voice file invalid */
     settings_apply_skins();
+#ifdef HAVE_BLUETOOTH
+    bluetooth_avrcp_init();        /* publish playback to / take keys from a BT sink */
+#endif
 
 /* do USB last so prompt (if enabled) can work correctly if USB was inserted with device off,
  * also doesn't hurt that it will display the nice pretty backdrop this way too. */
