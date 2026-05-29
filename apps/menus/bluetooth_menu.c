@@ -1,11 +1,12 @@
 /*
- * Bluetooth settings menu.
+ * Bluetooth menu — single Pixel-style list.
  *
- * Talks to the Y1's y1-btd daemon via the bt-client library
- * (firmware/target/hosted/innioasis/bluetooth/).  Top-level menu hangs
- * off the Settings menu; the scan screen pushes inquiry results from the
- * daemon's pump thread into a small mutex-protected list, and the
- * action_callback redraws the simplelist on a timer.
+ * One scrollable screen: a Bluetooth on/off toggle, the paired ("My Devices")
+ * list with connect/disconnect (OK) and forget (long-press/context), and the
+ * "Available Devices" list with a scan control and pair-on-select.  Talks to
+ * y1-btd via the bt-client library; the daemon's pump thread pushes inquiry
+ * results, the paired-device list (reply to list_devices), and connection-state
+ * changes into mutex-protected tables that the list redraws off a timer.
  */
 #include "config.h"
 
@@ -13,6 +14,7 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,138 +28,306 @@
 #include "bluetooth/bt-client.h"
 #include "exported_menus.h"
 
-#define SCAN_MAX_DEVICES  32
-#define SCAN_DURATION_S   10
+#define MAX_PAIRED       16
+#define MAX_AVAIL        32
+#define SCAN_DURATION_S  20
 
-struct scan_device {
-    char  addr[18];   /* "AA:BB:CC:DD:EE:FF" */
-    char  name[64];
-    uint32_t cod;
-    int8_t  rssi;
-    bool   audio;
+struct bt_dev {
+    char addr[18];        /* "AA:BB:CC:DD:EE:FF" */
+    char name[64];
+    bool connected;
+    bool audio;
 };
 
-static struct scan_device   scan_devices[SCAN_MAX_DEVICES];
-static int                  scan_count;
-static atomic_int           scan_dirty;
-static bool                 scan_running;
-static pthread_mutex_t      scan_mtx = PTHREAD_MUTEX_INITIALIZER;
+static struct bt_dev    paired[MAX_PAIRED];
+static int              paired_n;
+static struct bt_dev    avail[MAX_AVAIL];
+static int              avail_n;
+static bool             bt_enabled = true;   /* radio is powered at boot */
+static bool             scanning;
+static atomic_int       dirty;
+static pthread_mutex_t  mtx = PTHREAD_MUTEX_INITIALIZER;
+
+/* Row model -- rebuilt from the tables by the UI thread only. */
+enum row_type { R_TOGGLE, R_HDR_MY, R_PAIRED, R_HDR_AVAIL, R_SCANCTL, R_AVAIL };
+struct row { uint8_t type; int idx; };
+static struct row rows[2 + MAX_PAIRED + 2 + MAX_AVAIL];
+static int        rows_n;
+
+/* ---- daemon push handlers (run on the bt-client pump thread) ---- */
 
 static void on_inquiry_result(const char *addr, const char *name,
                               uint32_t cod, int8_t rssi)
 {
+    (void) rssi;
     if (!addr || !addr[0]) return;
-    pthread_mutex_lock(&scan_mtx);
-    for (int i = 0; i < scan_count; i++) {
-        if (!strcmp(scan_devices[i].addr, addr)) {
-            if (name && *name)
-                snprintf(scan_devices[i].name, sizeof scan_devices[i].name,
-                         "%s", name);
-            scan_devices[i].rssi = rssi;
-            pthread_mutex_unlock(&scan_mtx);
-            atomic_fetch_add(&scan_dirty, 1);
-            return;
-        }
+    pthread_mutex_lock(&mtx);
+    int i;
+    for (i = 0; i < avail_n; i++)
+        if (!strcmp(avail[i].addr, addr)) break;
+    if (i == avail_n && avail_n < MAX_AVAIL) {
+        avail_n++;
+        snprintf(avail[i].addr, sizeof(avail[i].addr), "%s", addr);
+        avail[i].audio = (cod & 0x200000u) != 0;
+        avail[i].name[0] = '\0';
     }
-    if (scan_count < SCAN_MAX_DEVICES) {
-        struct scan_device *d = &scan_devices[scan_count++];
-        snprintf(d->addr, sizeof d->addr, "%s", addr);
-        snprintf(d->name, sizeof d->name, "%s", name ? name : "");
-        d->cod   = cod;
-        d->rssi  = rssi;
-        d->audio = (cod & 0x200000u) != 0;
-    }
-    pthread_mutex_unlock(&scan_mtx);
-    atomic_fetch_add(&scan_dirty, 1);
+    if (i < MAX_AVAIL && name && *name)
+        snprintf(avail[i].name, sizeof(avail[i].name), "%s", name);
+    pthread_mutex_unlock(&mtx);
+    atomic_fetch_add(&dirty, 1);
 }
 
 static void on_inquiry_complete(void)
 {
-    scan_running = false;
-    atomic_fetch_add(&scan_dirty, 1);
+    scanning = false;
+    atomic_fetch_add(&dirty, 1);
 }
 
-static const char *scan_get_name(int sel, void *data, char *buf, size_t buf_sz)
+static void on_paired_begin(void)
+{
+    pthread_mutex_lock(&mtx);
+    paired_n = 0;
+    pthread_mutex_unlock(&mtx);
+}
+
+static void on_paired_device(const char *addr, const char *name, bool connected)
+{
+    if (!addr || !addr[0]) return;
+    pthread_mutex_lock(&mtx);
+    if (paired_n < MAX_PAIRED) {
+        struct bt_dev *d = &paired[paired_n++];
+        snprintf(d->addr, sizeof(d->addr), "%s", addr);
+        snprintf(d->name, sizeof(d->name), "%s", name ? name : "");
+        d->connected = connected;
+        d->audio = false;
+    }
+    pthread_mutex_unlock(&mtx);
+}
+
+static void on_paired_done(void)
+{
+    atomic_fetch_add(&dirty, 1);
+}
+
+/* A connect/disconnect happened -- re-fetch the authoritative paired list
+ * (its connected flags come from the daemon's device registry). */
+static void on_connection(const char *addr, const char *profile,
+                          const char *state)
+{
+    (void) addr; (void) profile; (void) state;
+    bt_client_request_devices();
+    atomic_fetch_add(&dirty, 1);
+}
+
+/* ---- list rendering (UI thread) ---- */
+
+static void build_rows(void)
+{
+    rows_n = 0;
+    rows[rows_n].type = R_TOGGLE; rows[rows_n].idx = 0; rows_n++;
+    if (!bt_enabled) return;
+
+    pthread_mutex_lock(&mtx);
+    int pn = paired_n, an = avail_n;
+    pthread_mutex_unlock(&mtx);
+
+    if (pn > 0) {
+        rows[rows_n].type = R_HDR_MY; rows[rows_n].idx = 0; rows_n++;
+        for (int i = 0; i < pn; i++) {
+            rows[rows_n].type = R_PAIRED; rows[rows_n].idx = i; rows_n++;
+        }
+    }
+    rows[rows_n].type = R_HDR_AVAIL; rows[rows_n].idx = 0; rows_n++;
+    rows[rows_n].type = R_SCANCTL;   rows[rows_n].idx = 0; rows_n++;
+    for (int i = 0; i < an; i++) {
+        rows[rows_n].type = R_AVAIL; rows[rows_n].idx = i; rows_n++;
+    }
+}
+
+static const char *get_name(int sel, void *data, char *buf, size_t buf_sz)
 {
     (void) data;
-    pthread_mutex_lock(&scan_mtx);
-    if (scan_count == 0) {
-        snprintf(buf, buf_sz, scan_running ? "Scanning..." : "No devices found");
-    } else if (sel < 0 || sel >= scan_count) {
+    if (sel < 0 || sel >= rows_n) { buf[0] = '\0'; return buf; }
+    struct row r = rows[sel];
+    pthread_mutex_lock(&mtx);
+    switch (r.type) {
+    case R_TOGGLE:
+        snprintf(buf, buf_sz, "Bluetooth:  %s", bt_enabled ? "On" : "Off");
+        break;
+    case R_HDR_MY:
+        snprintf(buf, buf_sz, "- My Devices -");
+        break;
+    case R_PAIRED:
+        if (r.idx < paired_n) {
+            struct bt_dev *d = &paired[r.idx];
+            snprintf(buf, buf_sz, "%s  [%s]",
+                     d->name[0] ? d->name : d->addr,
+                     d->connected ? "Connected" : "Paired");
+        } else buf[0] = '\0';
+        break;
+    case R_HDR_AVAIL:
+        snprintf(buf, buf_sz, "- Available Devices -");
+        break;
+    case R_SCANCTL:
+        snprintf(buf, buf_sz, scanning ? "Scanning... (stop)"
+                                       : "Scan for devices");
+        break;
+    case R_AVAIL:
+        if (r.idx < avail_n) {
+            struct bt_dev *d = &avail[r.idx];
+            snprintf(buf, buf_sz, "%s%s", d->name[0] ? d->name : d->addr,
+                     d->audio ? "  [audio]" : "");
+        } else buf[0] = '\0';
+        break;
+    default:
         buf[0] = '\0';
-    } else {
-        struct scan_device *d = &scan_devices[sel];
-        const char *label = d->name[0] ? d->name : d->addr;
-        snprintf(buf, buf_sz, "%s%s", label, d->audio ? " [audio]" : "");
+        break;
     }
-    pthread_mutex_unlock(&scan_mtx);
+    pthread_mutex_unlock(&mtx);
     return buf;
 }
 
-static int scan_action_cb(int action, struct gui_synclist *lists)
+static void toggle_bluetooth(void)
 {
-    static int last_seen_dirty = -1;
-    int cur = atomic_load(&scan_dirty);
-    if (cur != last_seen_dirty) {
-        last_seen_dirty = cur;
-        pthread_mutex_lock(&scan_mtx);
-        int n = scan_count > 0 ? scan_count : 1;
-        pthread_mutex_unlock(&scan_mtx);
-        gui_synclist_set_nb_items(lists, n);
+    bt_enabled = !bt_enabled;
+    bt_client_set_enabled(bt_enabled);
+    if (bt_enabled) {
+        bt_client_request_devices();
+    } else {
+        pthread_mutex_lock(&mtx);
+        paired_n = 0; avail_n = 0; scanning = false;
+        pthread_mutex_unlock(&mtx);
+    }
+    atomic_fetch_add(&dirty, 1);
+}
+
+static void toggle_scan(void)
+{
+    if (scanning) {
+        bt_client_cancel_inquiry();
+        scanning = false;
+    } else {
+        pthread_mutex_lock(&mtx);
+        avail_n = 0;
+        pthread_mutex_unlock(&mtx);
+        bt_client_start_inquiry(SCAN_DURATION_S);
+        scanning = true;
+    }
+    atomic_fetch_add(&dirty, 1);
+}
+
+static int action_cb(int action, struct gui_synclist *lists)
+{
+    static int last_dirty = -1;
+    int cur = atomic_load(&dirty);
+    if (cur != last_dirty) {
+        last_dirty = cur;
+        build_rows();
+        gui_synclist_set_nb_items(lists, rows_n);
         if (action == ACTION_NONE) action = ACTION_REDRAW;
     }
+
+    int sel = gui_synclist_get_sel_pos(lists);
+    struct row r = (sel >= 0 && sel < rows_n) ? rows[sel]
+                                              : (struct row){ R_HDR_MY, 0 };
+
     if (action == ACTION_STD_OK) {
-        pthread_mutex_lock(&scan_mtx);
-        int sel = gui_synclist_get_sel_pos(lists);
         char addr[18] = "";
-        if (scan_count > 0 && sel >= 0 && sel < scan_count)
-            snprintf(addr, sizeof addr, "%s", scan_devices[sel].addr);
-        pthread_mutex_unlock(&scan_mtx);
-        if (addr[0]) {
-            splashf(HZ, "Pairing %s...", addr);
-            bt_client_pair_device(addr);
-            return ACTION_STD_CANCEL;   /* close screen after request */
+        bool was_connected = false;
+        pthread_mutex_lock(&mtx);
+        if (r.type == R_PAIRED && r.idx < paired_n) {
+            snprintf(addr, sizeof(addr), "%s", paired[r.idx].addr);
+            was_connected = paired[r.idx].connected;
+        } else if (r.type == R_AVAIL && r.idx < avail_n) {
+            snprintf(addr, sizeof(addr), "%s", avail[r.idx].addr);
         }
+        pthread_mutex_unlock(&mtx);
+
+        switch (r.type) {
+        case R_TOGGLE:
+            toggle_bluetooth();
+            break;
+        case R_PAIRED:
+            if (!addr[0]) break;
+            if (was_connected) {
+                bt_client_disconnect_device(addr);
+            } else {
+                splashf(HZ, "Connecting %s", addr);
+                bt_client_connect_device(addr);
+            }
+            break;
+        case R_SCANCTL:
+            toggle_scan();
+            break;
+        case R_AVAIL:
+            if (addr[0]) {
+                splashf(HZ, "Pairing %s", addr);
+                bt_client_pair_device(addr);
+            }
+            break;
+        default:
+            break;
+        }
+        return ACTION_REDRAW;
     }
+
+    if (action == ACTION_STD_CONTEXT && r.type == R_PAIRED) {
+        char addr[18] = "", name[64] = "";
+        pthread_mutex_lock(&mtx);
+        if (r.idx < paired_n) {
+            snprintf(addr, sizeof(addr), "%s", paired[r.idx].addr);
+            snprintf(name, sizeof(name), "%s",
+                     paired[r.idx].name[0] ? paired[r.idx].name : paired[r.idx].addr);
+        }
+        pthread_mutex_unlock(&mtx);
+        if (addr[0]) {
+            bt_client_forget_device(addr);
+            splashf(HZ, "Forgot %s", name);
+            bt_client_request_devices();
+            atomic_fetch_add(&dirty, 1);
+        }
+        return ACTION_REDRAW;
+    }
+
     return action;
 }
 
-static int bt_scan_screen(void)
+static int bt_main_screen(void)
 {
     if (bt_client_start() < 0) {
-        splashf(HZ * 2, "BT daemon not running");
+        splashf(HZ * 2, "Bluetooth daemon not running");
         return 0;
     }
-    pthread_mutex_lock(&scan_mtx);
-    scan_count = 0;
-    pthread_mutex_unlock(&scan_mtx);
-    atomic_store(&scan_dirty, 0);
-    scan_running = true;
+    pthread_mutex_lock(&mtx);
+    paired_n = 0; avail_n = 0; scanning = false;
+    pthread_mutex_unlock(&mtx);
+    atomic_store(&dirty, 0);
+
     bt_client_set_inquiry_result_handler(on_inquiry_result);
     bt_client_set_inquiry_complete_handler(on_inquiry_complete);
-    bt_client_start_inquiry(SCAN_DURATION_S);
+    bt_client_set_paired_handler(on_paired_begin, on_paired_device, on_paired_done);
+    bt_client_set_connection_handler(on_connection);
+    if (bt_enabled) bt_client_request_devices();
+
+    build_rows();
 
     struct simplelist_info info;
-    simplelist_info_init(&info, "Scan for devices", 1, NULL);
-    info.get_name        = scan_get_name;
-    info.action_callback = scan_action_cb;
-    info.timeout         = HZ / 2;       /* refresh twice a second */
+    simplelist_info_init(&info, "Bluetooth", rows_n, NULL);
+    info.get_name        = get_name;
+    info.action_callback = action_cb;
+    info.timeout         = HZ / 2;
     simplelist_show_list(&info);
 
-    bt_client_cancel_inquiry();
+    if (scanning) { bt_client_cancel_inquiry(); scanning = false; }
     bt_client_set_inquiry_result_handler(NULL);
     bt_client_set_inquiry_complete_handler(NULL);
+    bt_client_set_paired_handler(NULL, NULL, NULL);
+    bt_client_set_connection_handler(NULL);   /* auto-route handler is internal
+                                                 to bt-client, unaffected */
     return 0;
 }
 
-/* Output routing is automatic now: the bt-client pump flips output to BT when
- * the A2DP stream comes up and back to headphones/speaker when it drops, so the
- * old manual "Output (toggle)" item is gone.  The full device-management menu
- * (connect/disconnect/forget + BT on/off) replaces this scaffold. */
-MENUITEM_FUNCTION(bt_scan_item,    0, "Scan for devices",
-                  bt_scan_screen,    NULL, Icon_NOICON);
-
-MAKE_MENU(bluetooth_menu, "Bluetooth", NULL, Icon_NOICON,
-          &bt_scan_item);
+MENUITEM_FUNCTION(bluetooth_menu, 0, "Bluetooth",
+                  bt_main_screen, NULL, Icon_NOICON);
 
 #endif /* HAVE_BLUETOOTH */

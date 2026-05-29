@@ -26,6 +26,13 @@ void bt_client_stop(void);
 bool bt_client_is_output(void);
 void bt_client_set_output(bool on);
 
+/* Radio power on/off (set_enabled op -> daemon hci_power_control). */
+void bt_client_set_enabled(bool on);
+
+/* Request the paired-device list; the reply is delivered asynchronously to the
+ * paired handler set below (begin -> one per device -> done). */
+void bt_client_request_devices(void);
+
 /* Publish from playback engine on each track change. NULL strings → "". */
 void bt_client_set_now_playing(const char *title, const char *artist,
                                 const char *album, const char *genre,
@@ -73,6 +80,10 @@ typedef void (*bt_inquiry_result_handler_t)(const char *addr,
                                               uint32_t cod,
                                               int8_t rssi);
 typedef void (*bt_inquiry_complete_handler_t)(void);
+/* Paired-device list (reply to bt_client_request_devices): begin() once, then
+ * device() per paired device, then done() once. */
+typedef void (*bt_paired_device_handler_t)(const char *addr, const char *name,
+                                            bool connected);
 
 void bt_client_set_passthrough_handler(bt_passthrough_handler_t h);
 void bt_client_set_volume_handler(bt_volume_handler_t h);
@@ -80,6 +91,9 @@ void bt_client_set_connection_handler(bt_connection_handler_t h);
 void bt_client_set_now_playing_in_handler(bt_now_playing_in_handler_t h);
 void bt_client_set_inquiry_result_handler(bt_inquiry_result_handler_t h);
 void bt_client_set_inquiry_complete_handler(bt_inquiry_complete_handler_t h);
+void bt_client_set_paired_handler(void (*begin)(void),
+                                  bt_paired_device_handler_t device,
+                                  void (*done)(void));
 
 /* The client lib runs its IPC pump from a dedicated pthread. If the host
  * prefers single-threaded service, call this periodically instead and pass
