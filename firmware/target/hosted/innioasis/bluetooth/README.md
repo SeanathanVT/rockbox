@@ -26,16 +26,16 @@ When the protocol changes (new ops, ring layout), update both copies and bump `Y
 
 ## What's wired
 
-- **Scan + pair UI** (`apps/menus/bluetooth_menu.c`).  Streams `inquiry_result` events from the daemon into a simplelist; user selects → `bt_client_pair_device(addr)`.
-- **Output toggle** placeholder.  Flips `bt_client_set_output(true/false)`.
+- **Pixel-style Bluetooth menu** (`apps/menus/bluetooth_menu.c`) — one list: on/off (radio power via `set_enabled`), "My Devices" (OK = connect/disconnect, long-press = forget; from `list_devices`), "Available Devices" (scan + pair-on-select). Inquiry, paired-list, and connection events stream from the daemon's pump thread.
+- **Automatic output routing** — the bt-client pump flips `bt_client_set_output()` on A2DP `connection_state` (BT > headphones > speaker; falls back on disconnect).
+- **PCM mirror** — `pcm-y1mtk.c` feeds the mixed 44.1 kHz S16 buffer to `bt_client_pcm_write()` when BT output is active (local amps muted; the `/dev/eac` write paces).
 
-`bt_client_start()` is called lazily on first menu entry — the daemon doesn't need to be running at Rockbox boot.
+`bt_client_start()` is idempotent and called on menu entry; the daemon doesn't need to be running at Rockbox boot.
 
 ## Still to wire
 
 | Hook | Where | Why |
 |---|---|---|
-| PCM mirror to the BT ring | `pcm-y1mtk.c` write loop: `if (bt_client_is_output()) bt_client_pcm_write(frame, n)` | Until this lands, the output toggle does nothing audible. |
 | Now-playing publish | `apps/playback.c` track-change handler → `bt_client_set_now_playing(...)` | Drives AVRCP metadata to the speaker/car. |
 | Position tick | 1 Hz from playback engine → `bt_client_set_position(elapsed_ms)` | AVRCP position. |
 | Playback status | play/pause/stop → `bt_client_set_playback_status(...)` | AVRCP status. |
@@ -43,8 +43,7 @@ When the protocol changes (new ops, ring layout), update both copies and bump `Y
 | Volume sync (in) | `bt_client_set_volume_handler(...)` → bounce to Rockbox thread → apply | Absolute Volume from sink/CT. |
 | Passthrough keys | `bt_client_set_passthrough_handler(...)` → translate to BUTTON_* | Speaker buttons control playback. |
 | Battery push | `powermgmt-y1.c` battery update → `bt_client_set_battery(pct, charging)` | AVRCP battery attribute / GATT BAS. |
-| Paired-devices screen | `apps/menus/bluetooth_menu.c` | List link-keyed devices, connect/forget. |
-| Auto-route on connect | `bt_client_set_connection_handler(...)` → `bt_client_set_output(true)` | Most-expected DAP behaviour. |
+| Persist enabled + boot start | a `settings_list.c` flag + app-init `bt_client_start()` | Survive reboot; route without opening the menu first. |
 
 ## Threading model
 

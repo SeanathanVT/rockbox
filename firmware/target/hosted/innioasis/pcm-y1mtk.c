@@ -171,8 +171,9 @@ static volatile bool worker_paused = false;
  * first get-more already has mixed data -- skip the mix-ahead status callback
  * exactly once after a (re)start to stay in phase with the double buffer. */
 static bool mixer_primed = false;
-/* Worker's view of the BT-output toggle, so it can re-apply the amp route the
- * moment the user flips it mid-playback (the flag itself lives in bt-client). */
+/* Worker's view of the BT-output flag (driven automatically by the bt-client
+ * pump on A2DP connect/disconnect; lives in bt-client), so the worker can
+ * re-apply the amp route the moment routing changes mid-playback. */
 static bool bt_routing = false;
 
 /* -------------------------------------------------------------------------- */
