@@ -1,12 +1,5 @@
 /*
- * This config file is for the Innioasis Y1.
- *
- * SoC:     MediaTek MT6572 (dual Cortex-A7, ARMv7-A + NEON + VFPv4)
- * Kernel:  Linux 3.4.x (Android 4.2.2 base; minimal-Linux rootfs envisioned)
- * Panel:   480x360 landscape, 32 bpp XRGB8888, /dev/graphics/fb0 (mtkfb)
- * Audio:   MediaTek custom HAL on /dev/eac (NOT ALSA — see docs/audio-stack.md)
- * Input:   /dev/input/event0..4 (mtk-kpd, ACCDET, mtk-tpd, mtk-tpd-kpd, AVRCP)
- * Battery: /sys/class/power_supply/battery/{capacity,batt_vol,status,...}
+ * This config file is for the Innioasis Y1
  */
 
 #define MODEL_NUMBER 125

@@ -1,14 +1,24 @@
-/*
- * bt-client.h — Rockbox-side glue for the y1-btd Bluetooth daemon.
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * Rockbox calls into this header to publish playback state, ingest BT key
- * events back, and route PCM frames to the daemon's shared-memory ring.
+ * Copyright (C) 2026 by Sean Halpin
  *
- * Daemon and protocol live in /work/y1-platform/bluetooth/; the on-wire
- * contract is in <y1bt/ipc_proto.h> (shipped alongside this header so
- * Rockbox does not depend on y1-platform/ at build time — see
- * firmware/target/hosted/innioasis/bluetooth/include/y1bt/ipc_proto.h).
- */
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+
 #ifndef Y1_BT_CLIENT_H
 #define Y1_BT_CLIENT_H
 

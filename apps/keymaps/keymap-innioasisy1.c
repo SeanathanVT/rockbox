@@ -1,15 +1,25 @@
-/*
- * Innioasis Y1 — keymap
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * Click wheel, matching the glyphs etched on the device:
- *   MENU   (top)     Back (short) / Menu (long)
- *   SELECT (center)  OK / context menu (long)
- *   PLAY   (bottom)  Play-Pause / Stop (long)
- *   LEFT  / RIGHT    prev / next arrows: skip track in WPS, move between
- *                    fields in settings, cursor in keyboard, back/enter in lists
- *   SCROLL back/fwd  list scroll; value inc/dec in settings; volume in WPS;
- *                    cursor up/down in keyboard
- */
+ * Copyright (C) 2026 by Sean Halpin
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+
+/* Button Code Definitions for Innioasis Y1 target */
 
 #include <stdio.h>
 #include <string.h>

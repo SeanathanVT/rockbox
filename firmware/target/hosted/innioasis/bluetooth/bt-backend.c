@@ -5,19 +5,20 @@
  *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * Innioasis Y1 backend for the shared Bluetooth layer.  Binds the
- * device-agnostic bt_backend_* interface (firmware/export/bluetooth_backend.h)
- * to the y1-btd client (bt-client.c): AVRCP publish + remote control (mapping
- * the generic key/status enums to/from the y1-btd IPC wire constants) and the
- * device discovery/management surface used by the Bluetooth menu.  All Y1-/
- * y1-btd-specific knowledge lives here.
+ * Copyright (C) 2026 by Sean Halpin
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
  ****************************************************************************/
+
 #include "bluetooth_backend.h"
 
 #include "bt-client.h"
