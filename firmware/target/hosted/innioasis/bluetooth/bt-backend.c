@@ -122,6 +122,16 @@ bool bt_backend_audio_active(void)
 /* ---- device discovery / management ---- */
 
 static const struct bt_device_observer *s_obs;
+static bt_pairing_confirm_fn            s_pair_fn;
+
+/* y1-btd pairing-request event -> generic handler.  Only numeric comparison
+ * needs a user prompt; other kinds (e.g. Just Works) are settled in the daemon. */
+static void pairing_cb(const char *addr, const char *name,
+                       const char *kind, uint32_t code)
+{
+    if (s_pair_fn && kind && !strcmp(kind, "numeric"))
+        s_pair_fn(addr, name, code);
+}
 
 /* bt-client pump-thread callbacks -> observer.  The connection callback's
  * addr/profile/state are dropped: the menu re-queries the authoritative list. */
@@ -172,6 +182,16 @@ void bt_backend_set_device_observer(const struct bt_device_observer *obs)
         bt_client_set_paired_handler(NULL, NULL, NULL);
         bt_client_set_connection_handler(NULL);
     }
+}
+
+void bt_backend_set_pairing_handler(bt_pairing_confirm_fn fn)
+{
+    s_pair_fn = fn;
+    bt_client_set_pairing_request_handler(fn ? pairing_cb : NULL);
+}
+void bt_backend_pairing_confirm(const char *addr, bool accept)
+{
+    bt_client_pairing_confirm(addr, accept);
 }
 
 void bt_backend_set_enabled(bool enabled)      { bt_client_set_enabled(enabled); }

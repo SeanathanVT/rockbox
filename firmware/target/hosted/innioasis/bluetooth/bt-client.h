@@ -65,6 +65,8 @@ void bt_client_forget_device(const char *bd_addr);
 void bt_client_start_inquiry(uint16_t duration_s);
 void bt_client_cancel_inquiry(void);
 void bt_client_pair_device(const char *bd_addr);
+/* Answer an SSP numeric-comparison prompt (bt_pairing_request_handler_t). */
+void bt_client_pairing_confirm(const char *bd_addr, bool accept);
 
 /* PCM mirror: call from pcm-y1mtk.c's write loop when BT output is selected.
  * Writes up to `frames` interleaved stereo S16LE frames into the shared ring;
@@ -90,6 +92,11 @@ typedef void (*bt_inquiry_result_handler_t)(const char *addr,
                                               uint32_t cod,
                                               int8_t rssi);
 typedef void (*bt_inquiry_complete_handler_t)(void);
+/* SSP pairing prompt: the daemon needs the user to confirm before the bond
+ * completes.  kind "numeric" -> `code` is a 6-digit number to compare with the
+ * peer's display; answer with bt_client_pairing_confirm(). */
+typedef void (*bt_pairing_request_handler_t)(const char *addr, const char *name,
+                                             const char *kind, uint32_t code);
 /* Paired-device list (reply to bt_client_request_devices): begin() once, then
  * device() per paired device, then done() once. */
 typedef void (*bt_paired_device_handler_t)(const char *addr, const char *name,
@@ -101,6 +108,7 @@ void bt_client_set_connection_handler(bt_connection_handler_t h);
 void bt_client_set_now_playing_in_handler(bt_now_playing_in_handler_t h);
 void bt_client_set_inquiry_result_handler(bt_inquiry_result_handler_t h);
 void bt_client_set_inquiry_complete_handler(bt_inquiry_complete_handler_t h);
+void bt_client_set_pairing_request_handler(bt_pairing_request_handler_t h);
 void bt_client_set_paired_handler(void (*begin)(void),
                                   bt_paired_device_handler_t device,
                                   void (*done)(void));

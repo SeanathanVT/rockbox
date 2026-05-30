@@ -97,6 +97,16 @@ struct bt_device_observer {
 /* Register the observer for device events, or clear it with NULL. */
 void bt_backend_set_device_observer(const struct bt_device_observer *obs);
 
+/* Pairing confirmation (SSP numeric comparison): the backend invokes this when
+ * the peer needs the user to verify a 6-digit `code` shown on both devices.
+ * Display it, let the user accept/reject, then call bt_backend_pairing_confirm.
+ * May fire from the backend's own thread, so the handler must be cheap and
+ * thread-safe. Register with NULL to clear (e.g. auto-accept while no UI). */
+typedef void (*bt_pairing_confirm_fn)(const char *addr, const char *name,
+                                      uint32_t code);
+void bt_backend_set_pairing_handler(bt_pairing_confirm_fn fn);
+void bt_backend_pairing_confirm(const char *addr, bool accept);
+
 void bt_backend_set_enabled(bool enabled);          /* radio power on/off */
 void bt_backend_request_devices(void);              /* -> paired_* callbacks */
 void bt_backend_scan_start(uint16_t duration_s);    /* -> scan_result/scan_complete */
