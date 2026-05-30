@@ -358,6 +358,9 @@ struct system_status
 
     int resume_modified; /* playlist is modified (=> warn before erase) */
     char browse_last_folder[MAX_PATH];/* only saved if keep_directory = true */
+#ifdef HAVE_BLUETOOTH
+    int bluetooth_enabled; /* radio power, persisted across boots (1=on) */
+#endif
 };
 
 struct user_settings

@@ -972,6 +972,9 @@ const struct settings_list settings[] = {
     SYSTEM_STATUS(0, topruntime,      0,     "TRT"),
     SYSTEM_STATUS(0, last_screen,    -1,     "PVS"),
     SYSTEM_STATUS(0, last_browser,    0,     "BRS"),
+#ifdef HAVE_BLUETOOTH
+    SYSTEM_STATUS(0, bluetooth_enabled, 1,   "BTE"),
+#endif
 /* sound settings */
     CUSTOM_SETTING(F_NO_WRAP, volume_limit, LANG_VOLUME_LIMIT,
                   NULL, "volume limit",

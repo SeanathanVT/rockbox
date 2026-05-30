@@ -291,6 +291,9 @@ static void btav_thread(void)
             if (!bt_backend_start())
                 continue;
             started = true;
+            /* Honour the persisted radio-power preference (the daemon powers
+             * the radio on by default; a saved "off" turns it back off). */
+            bt_backend_set_enabled(global_status.bluetooth_enabled != 0);
         }
 
         poll_output_route();   /* before in_drain: inbound volume needs the current path */
