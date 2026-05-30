@@ -33,6 +33,10 @@
 
 #define AUDIOHW_CAPS 0
 
-AUDIOHW_SETTING(VOLUME, "dB", 0, 1, -73, 6, -25)
+/* name, unit, decimals, step, min, max, default.  Step is 5 dB: one wheel
+ * tick moves 5 dB, so the -73..+6 dB range is ~16 steps end to end -- the
+ * coarse, fast volume stepping the stock player uses, instead of ~80 1 dB
+ * ticks.  (The step is also the Settings > Sound > Volume increment.) */
+AUDIOHW_SETTING(VOLUME, "dB", 0, 5, -73, 6, -25)
 
 #endif /* __Y1MTK_CODEC_H__ */
