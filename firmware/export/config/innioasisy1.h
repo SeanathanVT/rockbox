@@ -24,9 +24,9 @@
 #define CONFIG_LCD      LCD_INGENIC_LINUX  /* fbdev-backed; reused from hibylinux family */
 /* NB: do NOT enable FB_DOUBLEBUF — the mtkfb mmap is a single screen
  * (smem_len == one FRAMEBUFFER_SIZE), so lcd-linuxfb.c's back-plane write at
- * +FRAMEBUFFER_SIZE runs off the mapping and SIGSEGVs on the second frame
- * (tested 2026-05-26: rendered one frame, then crashed). Real double-buffering
- * would need the mtkfb's own buffer model, not yres_virtual*2. */
+ * +FRAMEBUFFER_SIZE runs off the mapping and SIGSEGVs on the second frame.
+ * Real double-buffering would need the mtkfb's own buffer model, not
+ * yres_virtual*2. */
 
 #define HAVE_ALBUMART
 #define HAVE_BMP_SCALING
@@ -120,7 +120,7 @@
 #define ROOTDRIVE_DEV           "/sys/block/mmcblk0"
 #define MULTIDRIVE_DEV          "/sys/block/mmcblk1"
 
-/* Audio — MTK custom (/dev/eac). Driver is stub until RE complete (see docs/audio-re-progress.md) */
+/* Audio — MTK custom (/dev/eac); driver in target/hosted/innioasis/pcm-y1mtk.c */
 #define HAVE_Y1MTK_CODEC
 #define HAVE_SW_VOLUME_CONTROL
 #define HAVE_SW_TONE_CONTROLS

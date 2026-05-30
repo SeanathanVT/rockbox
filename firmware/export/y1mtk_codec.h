@@ -20,15 +20,12 @@
  ****************************************************************************/
 
 /*
- * Innioasis Y1 — audiohw definitions for the MTK /dev/eac driver.
+ * Innioasis Y1 — audiohw definitions for the MTK /dev/eac driver
+ * (target/hosted/innioasis/pcm-y1mtk.c).
  *
- * Driver: target/hosted/innioasis/pcm-y1mtk.c.
- * Background: docs/audio-stack.md (ioctl table) + audio-re-progress.md.
- *
- * HW volume is via SET_ANAAFE_REG writes to MT6323 codec registers — exact
- * register set is undocumented in the BSP header, so volume stays software-only
- * (HAVE_SW_VOLUME_CONTROL in innioasisy1.h) until we can dump the codec gain
- * registers from a running stock device.
+ * HW volume would be SET_ANAAFE_REG writes to MT6323 codec registers, but the
+ * gain register set is undocumented in the BSP header, so volume is software
+ * only (HAVE_SW_VOLUME_CONTROL in innioasisy1.h).
  */
 
 #ifndef __Y1MTK_CODEC_H__
