@@ -34,7 +34,9 @@
 #include "kernel.h"
 #include "list.h"
 #include "menu.h"
+#include "settings.h"
 #include "splash.h"
+#include "yesno.h"
 
 #include "bluetooth_backend.h"
 #include "exported_menus.h"
@@ -54,7 +56,7 @@ static struct bt_dev    paired[MAX_PAIRED];
 static int              paired_n;
 static struct bt_dev    avail[MAX_AVAIL];
 static int              avail_n;
-static bool             bt_enabled = true;   /* radio is powered at boot */
+static bool             bt_enabled = true;   /* mirrors global_status.bluetooth_enabled */
 static bool             scanning;
 static atomic_int       dirty;
 static pthread_mutex_t  mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -208,6 +210,8 @@ static const char *get_name(int sel, void *data, char *buf, size_t buf_sz)
 static void toggle_bluetooth(void)
 {
     bt_enabled = !bt_enabled;
+    global_status.bluetooth_enabled = bt_enabled;
+    status_save(true);                  /* remember across reboots */
     bt_backend_set_enabled(bt_enabled);
     if (bt_enabled) {
         bt_backend_request_devices();
@@ -299,9 +303,13 @@ static int action_cb(int action, struct gui_synclist *lists)
         }
         pthread_mutex_unlock(&mtx);
         if (addr[0]) {
-            bt_backend_forget(addr);
-            splashf(HZ, "Forgot %s", name);
-            bt_backend_request_devices();
+            char prompt[80];
+            snprintf(prompt, sizeof(prompt), "Forget %s?", name);
+            if (yesno_pop(prompt)) {
+                bt_backend_forget(addr);
+                splashf(HZ, "Forgot %s", name);
+                bt_backend_request_devices();
+            }
             atomic_fetch_add(&dirty, 1);
         }
         return ACTION_REDRAW;
@@ -321,6 +329,7 @@ static int bt_main_screen(void)
     pthread_mutex_unlock(&mtx);
     atomic_store(&dirty, 0);
 
+    bt_enabled = global_status.bluetooth_enabled != 0;
     bt_backend_set_device_observer(&menu_observer);
     if (bt_enabled) bt_backend_request_devices();
 
