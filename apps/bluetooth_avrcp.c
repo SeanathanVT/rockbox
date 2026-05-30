@@ -84,6 +84,14 @@ static void on_remote_volume(uint8_t volume_pct)
 
 static int last_vol_sent = INT_MIN;          /* last percent we PUBLISHED to the sink */
 
+/* Per-output-path volume.  global_status.volume is the LOCAL (speaker/HP)
+ * volume except while BT is the active output, when it becomes the BT volume
+ * domain (tracks/commands the sink via absolute volume).  We snapshot the local
+ * volume entering a BT episode and restore it on exit, so the sink's level --
+ * a different scale entirely -- never carries over to local playback. */
+static int  saved_local_volume = INT_MIN;
+static bool bt_was_active       = false;
+
 static int vol_to_percent(int v)
 {
     int lo = sound_min(SOUND_VOLUME);
@@ -97,6 +105,10 @@ static int vol_to_percent(int v)
 
 static void apply_abs_volume(uint8_t percent)
 {
+    /* The sink's reported volume drives the BT domain only.  Ignore it when BT
+     * isn't the active output so a stray notification can't move local volume. */
+    if (!bt_was_active)
+        return;
     int lo = sound_min(SOUND_VOLUME);
     int hi = sound_max(SOUND_VOLUME);
     int v  = lo + ((int) percent * (hi - lo) + 50) / 100;
@@ -185,8 +197,31 @@ static void poll_status(void)
     }
 }
 
+/* Follow the output route: snapshot/restore the local volume around a BT
+ * episode so the two domains never bleed into each other. */
+static void poll_output_route(void)
+{
+    bool active = bt_backend_audio_active();
+    if (active == bt_was_active)
+        return;
+    bt_was_active = active;
+    last_vol_sent = INT_MIN;                  /* force re-publish on the new path */
+    if (active) {
+        /* local -> BT: remember the speaker/HP level.  The sink's VolumeChanged
+         * populates the BT domain (global_status.volume) from here on. */
+        saved_local_volume = global_status.volume;
+    } else if (saved_local_volume != INT_MIN) {
+        /* BT -> local: the BT episode left global_status.volume on the sink's
+         * scale; restore the speaker/HP volume we entered with. */
+        global_status.volume = saved_local_volume;
+        sound_set_volume(saved_local_volume);
+    }
+}
+
 static void poll_volume(void)
 {
+    if (!bt_was_active)                       /* abs-volume is the BT path only */
+        return;
     int pct = vol_to_percent(global_status.volume);
     if (pct != last_vol_sent) {
         last_vol_sent = pct;
@@ -266,6 +301,7 @@ static void btav_thread(void)
             started = true;
         }
 
+        poll_output_route();   /* before in_drain: inbound volume needs the current path */
         in_drain();
         poll_status();
         poll_volume();

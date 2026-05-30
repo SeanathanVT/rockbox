@@ -73,6 +73,13 @@ void bt_backend_position(uint32_t position_ms);
 void bt_backend_volume(uint8_t volume_pct);
 void bt_backend_battery(uint8_t percent, bool charging);
 
+/* True when Bluetooth is the active audio output (a sink is connected and
+ * rendering our stream).  Lets the volume domain follow the output route:
+ * while true the volume tracks/commands the sink (absolute volume); the local
+ * speaker/headphone volume is saved and restored around the BT episode so the
+ * sink's level never bleeds into local playback. */
+bool bt_backend_audio_active(void);
+
 /* ---- device discovery / management (used by the Bluetooth settings menu) ----
  *
  * Notifications from the backend.  May fire from the backend's own thread, so
