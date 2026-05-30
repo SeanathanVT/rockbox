@@ -72,6 +72,7 @@ static bt_connection_handler_t        cb_conn;
 static bt_now_playing_in_handler_t    cb_np_in;
 static bt_inquiry_result_handler_t    cb_inq;
 static bt_inquiry_complete_handler_t  cb_inq_done;
+static bt_pairing_request_handler_t   cb_pair;
 static void                          (*cb_paired_begin)(void);
 static bt_paired_device_handler_t     cb_paired_dev;
 static void                          (*cb_paired_done)(void);
@@ -254,6 +255,15 @@ static void dispatch_event(const char *line, int len) {
 
     } else if (!strcmp(ev, Y1BT_EVENT_INQUIRY_COMPLETE)) {
         if (cb_inq_done) cb_inq_done();
+
+    } else if (!strcmp(ev, Y1BT_EVENT_PAIRING_REQUEST)) {
+        char addr[20] = {0}, name[256] = {0}, kind[16] = {0};
+        int64_t code = 0;
+        find_str(line, len, "addr", addr, sizeof(addr));
+        find_str(line, len, "name", name, sizeof(name));
+        find_str(line, len, "kind", kind, sizeof(kind));
+        find_int(line, len, "code", &code);
+        if (cb_pair) cb_pair(addr, name, kind, (uint32_t) code);
     }
 }
 
@@ -381,6 +391,15 @@ void bt_client_set_pairing_mode(bool disc, uint16_t timeout_s) {
     if (n > 0) send_op_line(buf);
 }
 
+void bt_client_pairing_confirm(const char *addr, bool accept) {
+    char buf[128];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"op\":\"%s\",\"p\":{\"addr\":\"%s\",\"accept\":%s}}\n",
+                     Y1BT_OP_PAIRING_CONFIRM, addr ? addr : "",
+                     accept ? "true" : "false");
+    if (n > 0) send_op_line(buf);
+}
+
 void bt_client_connect_device(const char *addr) {
     char buf[128];
     int n = snprintf(buf, sizeof(buf),
@@ -475,6 +494,7 @@ size_t bt_client_pcm_write(const int16_t *samples, size_t frames) {
 void bt_client_set_passthrough_handler(bt_passthrough_handler_t h)     { cb_pt   = h; }
 void bt_client_set_volume_handler(bt_volume_handler_t h)               { cb_vol  = h; }
 void bt_client_set_connection_handler(bt_connection_handler_t h)       { cb_conn = h; }
+void bt_client_set_pairing_request_handler(bt_pairing_request_handler_t h) { cb_pair = h; }
 void bt_client_set_now_playing_in_handler(bt_now_playing_in_handler_t h){cb_np_in= h; }
 void bt_client_set_inquiry_result_handler(bt_inquiry_result_handler_t h)   { cb_inq      = h; }
 void bt_client_set_inquiry_complete_handler(bt_inquiry_complete_handler_t h){cb_inq_done = h; }

@@ -61,6 +61,13 @@ static bool             scanning;
 static atomic_int       dirty;
 static pthread_mutex_t  mtx = PTHREAD_MUTEX_INITIALIZER;
 
+/* Pending SSP numeric-comparison prompt (filled on the backend thread, drained
+ * by the UI thread in action_cb). */
+static char             pair_addr[18];
+static char             pair_name[64];
+static uint32_t         pair_code;
+static atomic_bool      pair_pending;
+
 /* Row model -- rebuilt from the tables by the UI thread only. */
 enum row_type { R_TOGGLE, R_HDR_MY, R_PAIRED, R_HDR_AVAIL, R_SCANCTL, R_AVAIL };
 struct row { uint8_t type; int idx; };
@@ -128,6 +135,18 @@ static void on_connection_changed(void)
 {
     bt_backend_request_devices();
     atomic_fetch_add(&dirty, 1);
+}
+
+/* SSP numeric-comparison prompt (backend thread): stash it for the UI thread. */
+static void on_pairing_request(const char *addr, const char *name, uint32_t code)
+{
+    if (!addr || !addr[0]) return;
+    pthread_mutex_lock(&mtx);
+    snprintf(pair_addr, sizeof(pair_addr), "%s", addr);
+    snprintf(pair_name, sizeof(pair_name), "%s", (name && name[0]) ? name : addr);
+    pair_code = code;
+    pthread_mutex_unlock(&mtx);
+    atomic_store(&pair_pending, true);
 }
 
 static const struct bt_device_observer menu_observer = {
@@ -249,6 +268,22 @@ static int action_cb(int action, struct gui_synclist *lists)
         if (action == ACTION_NONE) action = ACTION_REDRAW;
     }
 
+    /* A pairing prompt (SSP numeric comparison) arrived from the backend:
+     * show the code so the user can check it matches the other device. */
+    if (atomic_exchange(&pair_pending, false)) {
+        char addr[18], name[64], prompt[96];
+        uint32_t code;
+        pthread_mutex_lock(&mtx);
+        snprintf(addr, sizeof(addr), "%s", pair_addr);
+        snprintf(name, sizeof(name), "%s", pair_name);
+        code = pair_code;
+        pthread_mutex_unlock(&mtx);
+        snprintf(prompt, sizeof(prompt), "Pair %s?  Code %06u", name,
+                 (unsigned) code);
+        bt_backend_pairing_confirm(addr, yesno_pop(prompt));
+        return ACTION_REDRAW;
+    }
+
     int sel = gui_synclist_get_sel_pos(lists);
     struct row r = (sel >= 0 && sel < rows_n) ? rows[sel]
                                               : (struct row){ R_HDR_MY, 0 };
@@ -330,7 +365,9 @@ static int bt_main_screen(void)
     atomic_store(&dirty, 0);
 
     bt_enabled = global_status.bluetooth_enabled != 0;
+    atomic_store(&pair_pending, false);
     bt_backend_set_device_observer(&menu_observer);
+    bt_backend_set_pairing_handler(on_pairing_request);
     if (bt_enabled) bt_backend_request_devices();
 
     build_rows();
@@ -346,6 +383,7 @@ static int bt_main_screen(void)
     bt_backend_set_device_observer(NULL);     /* automatic output routing is
                                                  internal to the backend and
                                                  stays active */
+    bt_backend_set_pairing_handler(NULL);     /* no UI to confirm once closed */
     return 0;
 }
 
