@@ -52,7 +52,7 @@ typedef void (*bt_remote_volume_fn)(uint8_t volume_pct);
 /* ---- implemented by the target backend ---- */
 
 /* Bring up / attach to the Bluetooth transport.  Idempotent; returns true once
- * usable.  Callers may retry while it returns false (e.g. a daemon that isn't
+ * usable.  Callers may retry while it returns false (e.g. the transport isn't
  * up yet at boot). */
 bool bt_backend_start(void);
 
