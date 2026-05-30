@@ -83,6 +83,9 @@ static int last_vol_sent = INT_MIN;          /* last percent we PUBLISHED to the
  * a different scale entirely -- never carries over to local playback. */
 static int  saved_local_volume = INT_MIN;
 static bool bt_was_active       = false;
+#if defined(HAVE_HEADPHONE_DETECTION) || defined(HAVE_LINEOUT_DETECTION)
+static bool bt_caused_pause     = false;  /* we paused because the sink went away */
+#endif
 
 static int vol_to_percent(int v)
 {
@@ -208,6 +211,27 @@ static void poll_output_route(void)
         global_status.volume = saved_local_volume;
         sound_set_volume(saved_local_volume);
     }
+
+#if defined(HAVE_HEADPHONE_DETECTION) || defined(HAVE_LINEOUT_DETECTION)
+    /* Output-lost -> pause, rather than dumping playback onto the local
+     * speaker when the sink goes away.  Mirrors "pause on headphone unplug"
+     * and shares its setting; unplug_mode > 1 ("pause and resume") also
+     * resumes when the sink comes back. */
+    if (!active) {
+        if (global_settings.unplug_mode) {
+            int st = audio_status();
+            if ((st & AUDIO_STATUS_PLAY) && !(st & AUDIO_STATUS_PAUSE)) {
+                bt_caused_pause = true;
+                audio_pause();
+            }
+        }
+    } else if (bt_caused_pause) {
+        if (global_settings.unplug_mode > 1 &&
+            (audio_status() & AUDIO_STATUS_PAUSE))
+            audio_resume();
+        bt_caused_pause = false;
+    }
+#endif
 }
 
 static void poll_volume(void)
