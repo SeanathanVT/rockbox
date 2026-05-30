@@ -113,6 +113,11 @@ void bt_backend_battery(uint8_t percent, bool charging)
     bt_client_set_battery(percent, charging);
 }
 
+bool bt_backend_audio_active(void)
+{
+    return bt_client_is_output();
+}
+
 /* ---- device discovery / management ---- */
 
 static const struct bt_device_observer *s_obs;
