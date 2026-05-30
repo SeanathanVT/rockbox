@@ -176,6 +176,15 @@ static bool mixer_primed = false;
  * re-apply the amp route the moment routing changes mid-playback. */
 static bool bt_routing = false;
 
+/* Last per-channel centibel gain the core requested via audiohw_set_volume.
+ * Applied to the local output, but forced to UNITY while BT is the active
+ * output (apply_sw_volume): an A2DP sink renders at the absolute volume we
+ * command it over AVRCP, so attenuating the stream here too would double-
+ * attenuate (and slave Y1 playback to the sink's level). */
+static int  sw_vol_l = PCM_MUTE_LEVEL;
+static int  sw_vol_r = PCM_MUTE_LEVEL;
+static void apply_sw_volume(void);
+
 /* -------------------------------------------------------------------------- */
 /* AFE register writes via SET_AUDSYS_REG.                                    */
 
@@ -526,6 +535,7 @@ static void *worker_main(void *arg)
         if (bt_out != bt_routing) {
             bt_routing = bt_out;
             eac_apply_route();          /* mute local amps on, restore off */
+            apply_sw_volume();          /* unity to the sink while BT-routed; restore local gain on exit */
         }
         if (bt_out && addr && size)
             bt_client_pcm_write((const int16_t *) addr, size / 4);
@@ -638,6 +648,20 @@ void audiohw_set_frequency(int fsel)
     (void)fsel;
 }
 
+/* Push the effective gain to the PCM SW scaler.  Local output uses the core's
+ * requested centibel level; BT output streams at unity so the sink's AVRCP
+ * absolute volume is the only attenuation (no double-attenuate). */
+static void apply_sw_volume(void)
+{
+    enum { Y1_MUTE_CB = -730 };   /* keep in sync with y1mtk_codec.h VOLUME min */
+    if (bt_routing) {
+        pcm_set_master_volume(0, 0);   /* 0 cb = 0 dB = unity, full-scale PCM */
+        return;
+    }
+    pcm_set_master_volume(sw_vol_l <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : sw_vol_l,
+                          sw_vol_r <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : sw_vol_r);
+}
+
 void audiohw_set_volume(int vol_l, int vol_r)
 {
     /* No usable HW volume: the MT6323 gain registers (SET_ANAAFE_REG
@@ -647,9 +671,9 @@ void audiohw_set_volume(int vol_l, int vol_r)
      * ALL output is silenced (the "playhead moves but no audio" fault).
      * Mirrors firmware/drivers/audio/dummy_codec.c.  The VOLUME setting floor
      * (-73 dB -> -730 cb, y1mtk_codec.h) maps to a true digital mute. */
-    enum { Y1_MUTE_CB = -730 };   /* keep in sync with y1mtk_codec.h VOLUME min */
-    pcm_set_master_volume(vol_l <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : vol_l,
-                          vol_r <= Y1_MUTE_CB ? PCM_MUTE_LEVEL : vol_r);
+    sw_vol_l = vol_l;
+    sw_vol_r = vol_r;
+    apply_sw_volume();
 }
 
 void audiohw_mute(int mute)
