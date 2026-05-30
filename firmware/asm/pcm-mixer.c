@@ -19,7 +19,12 @@
  *
  ****************************************************************************/
 
-#if defined(CPU_ARM) && !(CONFIG_PLATFORM & PLATFORM_HOSTED)
+/* The ARMv6 inline-asm mixer has a clobber-list conflict that only gcc 13+
+ * rejects; clang accepts it.  Fall back to portable C only for gcc-built hosted
+ * ARM (e.g. the Innioasis Y1) -- clang-built hosted ARM (Android) keeps the asm.
+ * Native ARM targets are unaffected either way. */
+#if defined(CPU_ARM) && \
+    !((CONFIG_PLATFORM & PLATFORM_HOSTED) && defined(__GNUC__) && !defined(__clang__))
   #include "arm/pcm-mixer.c"
 #elif defined(CPU_COLDFIRE)
   #include "m68k/pcm-mixer.c"
