@@ -27,8 +27,7 @@
  * from the same ring on its IRQ1 wakeup.
  *
  * AUD_RESTART zeros the AFE register block, so the driver re-programs
- * everything to the values stock HAL uses during music playback (captured
- * on-device via boot-test/afe_dump idle/playing diff 2026-05-23):
+ * everything to the values the stock HAL uses during music playback:
  *
  *   open /dev/eac
  *   AUD_RESTART
@@ -54,23 +53,17 @@
  *
  *   write(2) loop ...
  *
- * STATUS (2026-05-25): playback is audible on hardware.  The bring-up mirrors
- * boot-test/y1_alive.c::test_audio: AFE config (eac_afe_config_phase1) ->
- * START_MEMIF -> prime + silence feed across the codec ramp/settle
- * (eac_codec_ramp_phase3 + the feed loop in stream_start) -> amps on -> volume
- * ramp -> SR + DAC enable (eac_afe_final_phase6).  Three integration bugs vs
- * the generic pcm/mixer layer had to be fixed to get here: (1) a sink-lock
- * self-deadlock in the mixer handoff (recursive worker_mtx); (2) the worker
- * drove only pcm_play_dma_complete_callback (get-more) and never
- * pcm_play_dma_status_callback(PCM_DMAST_STARTED), so the mixer never mixed or
- * advanced the channel and replayed a primed silent frame forever -- fixed by
- * the two-step handoff in worker_main (cf. pcm-alsa.c); (3) audiohw_set_volume
- * was a no-op while HAVE_SW_VOLUME_CONTROL needs it to call
- * pcm_set_master_volume, so every sample was scaled to silence (cf.
- * dummy_codec.c).  Output routes to headphone-or-speaker by jack detect.
- * Sample rate is locked to 44.1k by design (HW_SAMPR_CAPS = SAMPR_CAP_44, so
- * the DSP resamples everything; set_freq is a correct no-op).  See
- * docs/audio-stack.md.
+ * Bring-up order: AFE config (eac_afe_config_phase1) -> START_MEMIF -> prime +
+ * silence feed across the codec ramp/settle (eac_codec_ramp_phase3 + the feed
+ * loop in stream_start) -> amps on -> volume ramp -> SR + DAC enable
+ * (eac_afe_final_phase6).  The worker does a two-step handoff (cf. pcm-alsa.c):
+ * it must drive both pcm_play_dma_complete_callback (get-more) and
+ * pcm_play_dma_status_callback(PCM_DMAST_STARTED), or the mixer never mixes or
+ * advances the channel.  audiohw_set_volume calls pcm_set_master_volume because
+ * HAVE_SW_VOLUME_CONTROL does the attenuation in software (cf. dummy_codec.c).
+ * Output routes to headphone-or-speaker by jack detect.  Sample rate is locked
+ * to 44.1k (HW_SAMPR_CAPS = SAMPR_CAP_44; the DSP resamples, set_freq is a
+ * no-op).
  */
 
 /* Uncomment to route this file's logf() to DEBUGF/stderr in a -DDEBUG build
@@ -255,8 +248,8 @@ static void eac_clocks_hold(bool on)
 }
 
 /* Output routing.  The kernel accdet does NOT auto-mute the inactive route
- * (validated 2026-05-23: enabling both amps plays out of both at once), so
- * exactly one amp is energised.  The headphone-vs-speaker choice is owned by
+ * (enabling both amps plays out of both at once), so exactly one amp is
+ * energised.  The headphone-vs-speaker choice is owned by
  * Rockbox's HAVE_SPEAKER framework: audio_enable_speaker() resolves the
  * "Speaker" setting (Off/On/Auto) against the jack state and calls
  * audiohw_enable_speaker(), which records want_speaker here.  button.c polls
@@ -317,9 +310,8 @@ static int codec_write(uint32_t offset, uint32_t value, uint32_t mask)
 }
 
 /* Phase 1 of the captured stock session: 17 SET_AUDSYS_REG writes that
- * configure the AFE digital path.  Verbatim from the 2026-05-23 trace at
- * /work/logs/mediaserver-eac-args.log (boot-test/y1_alive::test_audio
- * confirmed tone-audible with this exact sequence). */
+ * configure the AFE digital path.  Verbatim from the stock HAL's
+ * music-playback trace. */
 static void eac_afe_config_phase1(void)
 {
     if (afe_configured || eac_fd < 0)
@@ -385,7 +377,7 @@ static void eac_afe_final_phase6(void)
     afe_write(0x010, 0x00000002, 0x00000002);    /* DAC_CON0: DL DAC enable */
 }
 
-/* Codec ramp-down captured from the stock session teardown 2026-05-23.
+/* Codec ramp-down captured from the stock session teardown.
  * Companion to eac_codec_ramp_phase3.  Resets MT6323 gain, mutes the
  * analog path, drops the codec DAC enable.  Pop-free shutdown depends
  * on running this before any AFE clear. */
@@ -401,9 +393,9 @@ static void eac_codec_rampdown(void)
     codec_write(0x10a, 0x00000100, 0xffff0100);    /* stock writes it twice */
 }
 
-/* Full AFE teardown captured from the stock session 2026-05-23.  Order
- * matches stock; 0x4c4 bit 4 is SET here (cleared in eac_afe_config_phase1
- * -- it's a mute/hold gate). */
+/* Full AFE teardown captured from the stock session.  Order matches stock;
+ * 0x4c4 bit 4 is SET here (cleared in eac_afe_config_phase1 -- it's a
+ * mute/hold gate). */
 static void eac_deconfigure_afe(void)
 {
     if (!afe_configured || eac_fd < 0)
@@ -467,9 +459,7 @@ static void stream_start(void)
     eac_alloc_dl1();
     eac_clocks_hold(true);
 
-    /* Mirror the captured stock session-start order verbatim.  The
-     * smoke test in boot-test/y1_alive.c::test_audio uses the same
-     * sequence and confirmed tone-audible 2026-05-23. */
+    /* Mirror the captured stock session-start order verbatim. */
     eac_afe_config_phase1();
 
     if (ioctl(eac_fd, START_MEMIF_TYPE, MEM_DL1) < 0)
@@ -481,11 +471,10 @@ static void stream_start(void)
 
     /* Keep the DMA fed with silence through the codec settle window rather
      * than sleeping.  The analog power-up needs data clocking out of I2S
-     * continuously: the working smoke test (boot-test/y1_alive.c) interleaves
-     * writes here, whereas a single prime + usleep starves the ring and the
-     * codec never passes the signal.  Each blocking write paces against the
-     * DAC, so this also supplies the ~215 ms the ramp expects (5 x ~46 ms).
-     * The worker isn't feeding yet -- it's signaled only after stream_start
+     * continuously; a single prime + usleep starves the ring and the codec
+     * never passes the signal.  Each blocking write paces against the DAC, so
+     * this also supplies the ~215 ms the ramp expects (5 x ~46 ms).  The
+     * worker isn't feeding yet -- it's signaled only after stream_start
      * returns. */
     for (int i = 0; i < 5; i++)
         eac_write_silence();

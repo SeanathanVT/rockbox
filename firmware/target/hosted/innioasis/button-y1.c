@@ -22,7 +22,7 @@
 /*
  * Innioasis Y1 — button_map() for hosted/button-devinput.c
  *
- * Click-wheel mapping verified via getevent capture, 2026-05-23.
+ * Click-wheel mapping verified by evdev capture.
  * See button-target.h for the physical-to-keycode table.
  */
 

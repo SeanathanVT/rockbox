@@ -22,8 +22,7 @@
 /*
  * Innioasis Y1 — button-target.h
  *
- * Physical layout (iPod-style click wheel; verified via
- * y1-platform/tools/capture-input.sh, 2026-05-23):
+ * Physical layout (iPod-style click wheel), verified by evdev capture:
  *
  *   Physical              evdev node            keycode
  *   --------              ----------            -------

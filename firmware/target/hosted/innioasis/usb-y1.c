@@ -23,11 +23,9 @@
  * Innioasis Y1 — USB mass storage (microSD RW over USB).
  *
  * The stock MT6572 kernel ships the android_usb composite gadget with the
- * mass_storage function built in (proven by the stock init.usb.rc); we drive it
+ * mass_storage function built in (per the stock init.usb.rc); we drive it
  * from /sys/class/android_usb/android0/ — no kernel rebuild.  Modelled on the
- * hosted-Linux FiiO target (firmware/target/hosted/fiio/usb-fiio.c).  Full design
- * notes, the concurrency model, and the on-device checks are in the y1-platform
- * repo: docs/usb-storage.md.
+ * hosted-Linux FiiO target (firmware/target/hosted/fiio/usb-fiio.c).
  *
  * Safety: USB mass storage gives the host raw block access, so we must fully
  * unmount the SD before exposing it, and never expose it while still mounted
