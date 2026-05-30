@@ -1,14 +1,24 @@
-/*
- * Bluetooth menu — single Pixel-style list.
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * One scrollable screen: a Bluetooth on/off toggle, the paired ("My Devices")
- * list with connect/disconnect (OK) and forget (long-press/context), and the
- * "Available Devices" list with a scan control and pair-on-select.  Talks to
- * the platform's Bluetooth stack through the abstract bluetooth_backend
- * interface; the backend pushes inquiry results, the paired-device list, and
- * connection changes (via bt_device_observer) into mutex-protected tables that
- * the list redraws off a timer.
- */
+ * Copyright (C) 2026 by Sean Halpin
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+
 #include "config.h"
 
 #ifdef HAVE_BLUETOOTH

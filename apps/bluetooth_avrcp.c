@@ -5,28 +5,20 @@
  *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * Bluetooth AVRCP glue: publishes Rockbox playback state (now-playing,
- * status, position, volume, battery) to a connected Bluetooth sink, and
- * applies inbound remote-control keys + absolute volume from it.
- *
- * Device-agnostic: all transport goes through the abstract backend in
- * <bluetooth_backend.h>, which a target implements for its own Bluetooth
- * stack.  Nothing here knows how the bytes reach the controller.
- *
- *   Outbound: now-playing fires from playback events (on the playback thread);
- *   status / position / volume / battery are polled by a dedicated dispatcher
- *   thread (the audio_* / sound_* APIs must run on a Rockbox thread).
- *
- *   Inbound: the backend may deliver keys / volume from its own thread, so its
- *   handlers only push onto a lock-free SPSC ring; the dispatcher drains it and
- *   drives playback.
+ * Copyright (C) 2026 by Sean Halpin
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
  ****************************************************************************/
+
 #include "config.h"
 
 #include <stdatomic.h>

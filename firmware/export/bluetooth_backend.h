@@ -5,21 +5,20 @@
  *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
+ * $Id$
  *
- * Abstract Bluetooth backend: the device-agnostic seam between the shared
- * AVRCP glue (apps/bluetooth_avrcp.c) and a target's Bluetooth stack/daemon.
- *
- * The shared layer publishes playback state and receives remote control
- * through this interface only; each target with HAVE_BLUETOOTH provides an
- * implementation under firmware/target/.../ that binds these calls to its own
- * Bluetooth transport.  No target-specific names or wire formats appear above
- * this line.
+ * Copyright (C) 2026 by Sean Halpin
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
  ****************************************************************************/
+
 #ifndef _BLUETOOTH_BACKEND_H
 #define _BLUETOOTH_BACKEND_H
 
