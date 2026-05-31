@@ -75,7 +75,7 @@ struct y1bt_pcm_ring {
  * id=null requests do not expect a response.
  * Unknown ops respond with { "ok": false, "id": .., "r": { "err": "unknown_op" } }.
  *
- * Schemas are documented in y1-platform/docs/bluetooth.md § IPC contract.
+ * Schemas are documented in the Bluetooth daemon's IPC contract doc.
  * Constants below are the canonical op-name strings; both sides should use them.
  */
 
