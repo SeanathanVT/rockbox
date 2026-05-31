@@ -33,7 +33,7 @@
 #define HAVE_JPEG
 #define HAVE_TAGCACHE
 
-/* Backlight via /sys/class/leds/lcd-backlight (verified on device, max=255) */
+/* Backlight via /sys/class/leds/lcd-backlight (max brightness 255) */
 #define HAVE_BACKLIGHT
 #define HAVE_BACKLIGHT_BRIGHTNESS
 #define MIN_BRIGHTNESS_SETTING     1
@@ -66,7 +66,7 @@
 #define CODEC_SIZE          0x100000  /* 1 MB */
 #define PLUGIN_BUFFER_SIZE  0x200000  /* 2 MB */
 
-/* Battery — sysfs path matches Android convention, koensayr-verified */
+/* Battery — sysfs path follows the Android convention */
 #define CONFIG_BATTERY_MEASURE (VOLTAGE_MEASURE | PERCENTAGE_MEASURE)
 #define BATTERY_TYPES_COUNT      1
 #define BATTERY_CAPACITY_DEFAULT 1500    /* approx; Y1 doesn't expose energy_full_design */
@@ -109,7 +109,7 @@
 #define HAVE_STORAGE_FLUSH
 /* fsync config/resume writes: the device owns its rootfs and can be hard-reset,
  * so a tiny page-cached write would otherwise be lost before the kernel's
- * periodic writeback flushes it.  See apps/settings.c and docs/persistence.md. */
+ * periodic writeback flushes it.  See apps/settings.c. */
 #define HAVE_SETTINGS_FSYNC
 #define HAVE_MULTIDRIVE
 #define NUM_DRIVES              2
@@ -138,7 +138,7 @@
 #define USB_VID_STR "0BB4"
 #define USB_PID_STR "0C03"
 
-/* Bluetooth: y1-btd daemon handles HCI + profiles.  Rockbox links the
+/* Bluetooth: a userspace daemon handles HCI + profiles.  Rockbox links the
  * client library to drive scan/pair/connect from the Settings UI and
  * (later) mirror PCM to the daemon's shared-memory ring for A2DP. */
 #define HAVE_BLUETOOTH

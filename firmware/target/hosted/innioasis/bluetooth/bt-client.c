@@ -23,7 +23,7 @@
  * bt-client.c — Rockbox-side glue for the y1-btd Bluetooth daemon.
  *
  * Two channels:
- *  - control: UNIX SOCK_STREAM at /var/run/y1btd.sock, line-delimited JSON.
+ *  - control: UNIX SOCK_STREAM at Y1BT_CTRL_SOCK_PATH (/tmp/y1btd.sock), line-delimited JSON.
  *  - PCM:     SPSC ring at Y1BT_PCM_RING_PATH (/tmp/y1btd-pcm), mmap'd.
  *
  * Threading model:
