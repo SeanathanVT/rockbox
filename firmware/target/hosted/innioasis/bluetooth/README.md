@@ -1,6 +1,6 @@
 # Y1 Bluetooth integration
 
-Rockbox-side glue for the `y1-btd` Bluetooth daemon.  Daemon source + architecture doc: `/work/y1-platform/bluetooth/` and `/work/y1-platform/docs/bluetooth.md`.
+Rockbox-side glue for the `y1-btd` Bluetooth daemon.  The daemon (HCI + BTstack profiles) and its architecture doc live in a separate repository.
 
 ## Files
 
@@ -38,8 +38,6 @@ When the protocol changes (new ops, ring layout), update both copies and bump `Y
 
 | Hook | Where | Why |
 |---|---|---|
-| Persist enabled | a `settings_list.c` flag | Remember BT on/off across reboot (radio currently defaults on at boot). |
-| Forget confirm | `apps/menus/bluetooth_menu.c` | Yes/no dialog before dropping a bond. |
 | Cover art (v2) | BIP responder on `goep_server.c` | Album art to the car display. |
 
 ## Threading model
