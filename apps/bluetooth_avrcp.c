@@ -178,6 +178,8 @@ static void in_drain(void)
 
 /* ---- outbound polling (dispatcher thread) ---- */
 
+static void publish_now_playing(struct mp3entry *e);
+
 static int last_status = -1;
 
 static void poll_status(void)
@@ -205,6 +207,12 @@ static void poll_output_route(void)
         /* local -> BT: remember the speaker/HP level.  The sink's VolumeChanged
          * populates the BT domain (global_status.volume) from here on. */
         saved_local_volume = global_status.volume;
+        /* Publish the current track to the freshly-connected sink.  A CHANGED-driven
+         * car head unit queries metadata once on connect and won't refetch until an
+         * edge tells it to, so without this its pane stays blank until the next track
+         * change.  poll_status() (next in the loop) re-asserts play status. */
+        publish_now_playing(audio_current_track());
+        last_status = -1;
     } else if (saved_local_volume != INT_MIN) {
         /* BT -> local: the BT episode left global_status.volume on the sink's
          * scale; restore the speaker/HP volume we entered with. */
@@ -275,14 +283,10 @@ static void poll_battery(void)
 
 /* ---- now-playing (playback thread, via app events) ---- */
 
-static void on_track(unsigned short id, void *data)
+static void publish_now_playing(struct mp3entry *e)
 {
-    struct track_event *te = (struct track_event *) data;
-    struct mp3entry *e;
-    (void) id;
-    if (!te || !te->id3)
+    if (!e)
         return;
-    e = te->id3;
     bt_backend_now_playing(e->title        ? e->title        : "",
                            e->artist       ? e->artist       : "",
                            e->album        ? e->album        : "",
@@ -291,6 +295,15 @@ static void on_track(unsigned short id, void *data)
                            0,                       /* num_tracks: unknown */
                            (uint32_t) e->length,
                            e->path);
+}
+
+static void on_track(unsigned short id, void *data)
+{
+    struct track_event *te = (struct track_event *) data;
+    (void) id;
+    if (!te || !te->id3)
+        return;
+    publish_now_playing(te->id3);
     /* A fresh track means we're playing; nudge status + position now. */
     last_status = BT_PB_PLAYING;
     bt_backend_playback_status(BT_PB_PLAYING);
