@@ -23,7 +23,9 @@
  * control-socket writes serialize on tx_mtx, but the IPC reader runs on a
  * dedicated pthread and invokes the user-supplied handlers on that thread --
  * callers must hop back to Rockbox's event queue for Rockbox-thread context. */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE              /* memmem */
+#endif
 
 #include "bt-client.h"
 #include "y1bt/ipc_proto.h"
