@@ -207,10 +207,9 @@ static void poll_output_route(void)
         /* local -> BT: remember the speaker/HP level.  The sink's VolumeChanged
          * populates the BT domain (global_status.volume) from here on. */
         saved_local_volume = global_status.volume;
-        /* Publish the current track to the freshly-connected sink.  A CHANGED-driven
-         * car head unit queries metadata once on connect and won't refetch until an
-         * edge tells it to, so without this its pane stays blank until the next track
-         * change.  poll_status() (next in the loop) re-asserts play status. */
+        /* Publish the current track on connect: a freshly-connected sink may not
+         * re-query metadata until the next track change, so without this its
+         * now-playing display can stay blank.  poll_status() re-asserts status. */
         publish_now_playing(audio_current_track());
         last_status = -1;
     } else if (saved_local_volume != INT_MIN) {
