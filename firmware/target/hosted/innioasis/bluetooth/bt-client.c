@@ -19,22 +19,10 @@
  *
  ****************************************************************************/
 
-/*
- * bt-client.c — Rockbox-side glue for the y1-btd Bluetooth daemon.
- *
- * Two channels:
- *  - control: UNIX SOCK_STREAM at Y1BT_CTRL_SOCK_PATH (/tmp/y1btd.sock), line-delimited JSON.
- *  - PCM:     SPSC ring at Y1BT_PCM_RING_PATH (/tmp/y1btd-pcm), mmap'd.
- *
- * Threading model:
- *  - Public API (bt_client_set_*, bt_client_pcm_write) is callable from any
- *    Rockbox thread.
- *  - Control-socket writes serialize on tx_mtx.
- *  - The IPC reader runs on a dedicated pthread that decodes inbound events
- *    and invokes user-supplied handlers. Handlers run on the pump thread —
- *    callers must short-circuit back to Rockbox's event queue if they need
- *    Rockbox-thread context.
- */
+/* Threading: the public API is callable from any Rockbox thread and
+ * control-socket writes serialize on tx_mtx, but the IPC reader runs on a
+ * dedicated pthread and invokes the user-supplied handlers on that thread --
+ * callers must hop back to Rockbox's event queue for Rockbox-thread context. */
 #define _GNU_SOURCE              /* memmem */
 
 #include "bt-client.h"
