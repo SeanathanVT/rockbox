@@ -322,20 +322,42 @@ static void send_op_line(const char *line) {
     pthread_mutex_unlock(&tx_mtx);
 }
 
+/* Escape a UTF-8 string into a JSON string body: `"` and `\` get a backslash,
+ * control bytes are dropped.  The daemon's inbound parser decodes the same two
+ * escapes, so a title/artist/path containing a quote round-trips instead of
+ * truncating the message at the embedded quote. */
+static void json_escape(const char *src, char *dst, size_t dst_sz) {
+    size_t i = 0;
+    for (const unsigned char *p = (const unsigned char *)(src ? src : "");
+         *p && i + 2 < dst_sz; p++) {
+        if (*p == '"' || *p == '\\') { dst[i++] = '\\'; dst[i++] = (char) *p; }
+        else if (*p < 0x20)          { /* skip control bytes */ }
+        else                         { dst[i++] = (char) *p; }
+    }
+    dst[i] = '\0';
+}
+
 void bt_client_set_now_playing(const char *title, const char *artist,
                                 const char *album, const char *genre,
                                 uint32_t track_num, uint32_t num_tracks,
                                 uint32_t length_ms, const char *path) {
-    char buf[2048];
+    /* Escape buffers sized to the daemon's field caps (title/artist/album 256,
+     * genre 64, path 1024) with 2x headroom for worst-case escaping; an
+     * over-long line is dropped by the n < sizeof(buf) guard rather than
+     * truncated mid-string. */
+    char et[520], ea[520], eal[520], eg[160], ep[2048];
+    json_escape(title,  et,  sizeof(et));
+    json_escape(artist, ea,  sizeof(ea));
+    json_escape(album,  eal, sizeof(eal));
+    json_escape(genre,  eg,  sizeof(eg));
+    json_escape(path,   ep,  sizeof(ep));
+    char buf[4000];   /* < daemon RX_BUF_SIZE (4096) so a full line never trips its overflow-drop */
     int n = snprintf(buf, sizeof(buf),
         "{\"op\":\"%s\",\"p\":{\"title\":\"%s\",\"artist\":\"%s\",\"album\":\"%s\","
         "\"genre\":\"%s\",\"track_num\":%u,\"num_tracks\":%u,\"length_ms\":%u,"
         "\"path\":\"%s\"}}\n",
-        Y1BT_OP_SET_NOW_PLAYING,
-        title ? title : "", artist ? artist : "", album ? album : "",
-        genre ? genre : "",
-        (unsigned) track_num, (unsigned) num_tracks, (unsigned) length_ms,
-        path ? path : "");
+        Y1BT_OP_SET_NOW_PLAYING, et, ea, eal, eg,
+        (unsigned) track_num, (unsigned) num_tracks, (unsigned) length_ms, ep);
     if (n > 0 && n < (int) sizeof(buf)) send_op_line(buf);
 }
 
