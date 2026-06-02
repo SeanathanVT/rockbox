@@ -221,9 +221,8 @@ static void poll_output_route(void)
 
 #if defined(HAVE_HEADPHONE_DETECTION) || defined(HAVE_LINEOUT_DETECTION)
     /* Output-lost -> pause, rather than dumping playback onto the local
-     * speaker when the sink goes away.  Mirrors "pause on headphone unplug"
-     * and shares its setting; unplug_mode > 1 ("pause and resume") also
-     * resumes when the sink comes back. */
+     * speaker when the sink goes away.  Reuses the "pause on headphone unplug"
+     * setting to decide whether to pause at all. */
     if (!active) {
         if (global_settings.unplug_mode) {
             int st = audio_status();
@@ -233,8 +232,12 @@ static void poll_output_route(void)
             }
         }
     } else if (bt_caused_pause) {
-        if (global_settings.unplug_mode > 1 &&
-            (audio_status() & AUDIO_STATUS_PAUSE))
+        /* The sink is back -> resume whatever we auto-paused.  Unlike a
+         * deliberate headphone unplug (which keeps the unplug_mode>1 "pause and
+         * resume" opt-in), a BT drop is involuntary -- a brief car/RF dropout
+         * shouldn't leave the user paused once the link recovers -- so resume
+         * unconditionally here. */
+        if (audio_status() & AUDIO_STATUS_PAUSE)
             audio_resume();
         bt_caused_pause = false;
     }
